@@ -17,7 +17,7 @@ from msct_image import Image
 import numpy as np
 
 
-def extract_patches_from_image(self, fname_raw_images, fname_gold_images, patches_coordinates, patch_info={}, verbose=1):
+def extract_patches_from_image(fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
     # input: list_gold_images
     # output: list of patches. One patch is a pile of patches from (first) raw images and (second) gold images. Order are respected.
@@ -97,6 +97,9 @@ class FileManager():
         else:
             self.ratio_patches_voxels = 0.1
 
+        # patch_info is the structure that will be transmitted for patches extraction
+        self.patch_info = {'patch_size': self.patch_size, 'patch_pixdim': self.patch_pixdim}
+
         # this function will be called on each patch to know its class/label
         self.fct_groundtruth_patch = fct_groundtruth_patch
 
@@ -124,7 +127,7 @@ class FileManager():
 
         return self.training_dataset, self.testing_dataset, self.validation_dataset
 
-    def compute_patches_coordinates(self, image, patch_size, patch_pixdim):
+    def compute_patches_coordinates(self, image):
         if self.extract_all_negative or self.extract_all_positive:
             print 'Extract all negative/positive patches: feature not yet ready...'
 
@@ -138,20 +141,22 @@ class FileManager():
 
         return random_batch
 
-
-
     def explore(self):
         # training dataset
         for i, fnames in enumerate(self.training_dataset):
-            fname_image = self.training_dataset[i][0]
-            fname_seg = self.training_dataset[i][1]
-            im_image = Image(fname_image)
-            nx, ny, nz, nt, px, py, pz, pt = im_image.dim
+            fname_raw_images = self.training_dataset[i][0]
+            fname_gold_images = self.training_dataset[i][1]
+            reference_image = Image(fname_raw_images[0])  # first raw image is selected as reference
 
-            data_im, data_seg = extract_slices_from_image(list_data[i][0], list_data[i][1])
+            patches_coordinates = self.compute_patches_coordinates(reference_image)
 
-            for data in :
+            patches = extract_patches_from_image(fname_raw_images,
+                                                 fname_gold_images,
+                                                 patches_coordinates,
+                                                 self.patch_info,
+                                                 verbose=1)
 
+            
 
         return
 
@@ -176,7 +181,7 @@ def extract_list_file_from_path(path_data):
             for fname_seg in files:
                 if fname_im[:-7] in fname_seg:
                     f_seg = fname_seg
-            list_data.append([root + fname_im, root + f_seg])
+            list_data.append([[fname_im], [f_seg]])
 
     return list_data
 
