@@ -17,6 +17,45 @@ from msct_image import Image
 import numpy as np
 
 
+def extract_patches_from_image(self, fname_raw_images, fname_gold_images, patches_coordinates, patch_info={}, verbose=1):
+    # input: list_raw_images
+    # input: list_gold_images
+    # output: list of patches. One patch is a pile of patches from (first) raw images and (second) gold images. Order are respected.
+    result = []
+    for k in range(len(patches_coordinates)):
+        ind = [patches_coordinates[k][0], patches_coordinates[k][1], patches_coordinates[k][2]]
+
+        # Transform voxel coordinates to physical coordinates to deal with different resolutions
+        # 1. transform ind to physical coordinates
+        # already done!
+        #ind_phys = image_file.transfo_pix2phys([ind])[0]
+        # 2. create grid around ind  - , ind_phys[2]
+        grid_physical = np.mgrid[ind[0] - patch_size / 2:ind[0] + patch_size / 2,
+                        ind[1] - patch_size / 2:ind[1] + patch_size / 2]
+        # 3. transform grid to voxel coordinates
+        coord_x = grid_physical[0, :, :].ravel()
+        coord_y = grid_physical[1, :, :].ravel()
+        coord_physical = [[coord_x[i], coord_y[i], ind_phys[2]] for i in range(len(coord_x))]
+        grid_voxel = np.array(image_file.transfo_phys2continuouspix(coord_physical))
+        # 4. interpolate image on the grid, deal with edges
+        patch = np.reshape(image_file.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
+                                                 interpolation_mode=1), (patch_size, patch_size))
+
+        if verbose == 2:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            cax = ax.imshow(patch, cmap='gray')
+            cbar = fig.colorbar(cax, ticks=[0, 255])
+            plt.show()
+
+        if patch.shape[0] == patch_size and patch.shape[1] == patch_size:
+            result.append(np.expand_dims(patch, axis=0))
+    if len(result) != 0:
+        return np.concatenate(result, axis=0)
+    else:
+        return None
+
+
 class FileManager():
     def __init__(self, dataset_path, fct_explore_dataset, patch_extraction_parameters, fct_groundtruth_patch):
         self.dataset_path = sct.slash_at_the_end(dataset_path, slash=1)
@@ -85,47 +124,21 @@ class FileManager():
 
         return self.training_dataset, self.testing_dataset, self.validation_dataset
 
-    def compute_patches_coordinates(self, image_dim, patch_size, patch_pixdim):
-        return 
+    def compute_patches_coordinates(self, image, patch_size, patch_pixdim):
+        if self.extract_all_negative or self.extract_all_positive:
+            print 'Extract all negative/positive patches: feature not yet ready...'
+
+        image_dim = image.dim
+
+        x, y, z = np.mgrid[0:image_dim[0], 0:image_dim[1], 0:image_dim[2]]
+        indexes = np.array(zip(x.ravel(), y.ravel(), z.ravel()))
+        physical_coordinates = image.transfo_pix2phys(indexes)
+
+        random_batch = np.random.choice(physical_coordinates.shape[0], int(round(physical_coordinates.shape[0] * self.ratio_patches_voxels)))
+
+        return random_batch
 
 
-    def extract_patches_from_image(self, image_file, patches_coordinates, patch_size=32, slice_of_interest=None, verbose=1):
-        result = []
-        for k in range(len(patches_coordinates)):
-            if slice_of_interest is None:
-                ind = [patches_coordinates[k][0], patches_coordinates[k][1], patches_coordinates[k][2]]
-            else:
-                ind = [patches_coordinates[k][0], patches_coordinates[k][1], slice_of_interest]
-
-            # Transform voxel coordinates to physical coordinates to deal with different resolutions
-            # 1. transform ind to physical coordinates
-            ind_phys = image_file.transfo_pix2phys([ind])[0]
-            # 2. create grid around ind  - , ind_phys[2]
-            grid_physical = np.mgrid[ind_phys[0] - patch_size / 2:ind_phys[0] + patch_size / 2,
-                            ind_phys[1] - patch_size / 2:ind_phys[1] + patch_size / 2]
-            # 3. transform grid to voxel coordinates
-            coord_x = grid_physical[0, :, :].ravel()
-            coord_y = grid_physical[1, :, :].ravel()
-            coord_physical = [[coord_x[i], coord_y[i], ind_phys[2]] for i in range(len(coord_x))]
-            grid_voxel = np.array(image_file.transfo_phys2continuouspix(coord_physical))
-            np.set_printoptions(threshold=np.inf)
-            # 4. interpolate image on the grid, deal with edges
-            patch = np.reshape(image_file.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                     interpolation_mode=1), (patch_size, patch_size))
-
-            if verbose == 2:
-                import matplotlib.pyplot as plt
-                fig, ax = plt.subplots()
-                cax = ax.imshow(patch, cmap='gray')
-                cbar = fig.colorbar(cax, ticks=[0, 255])
-                plt.show()
-
-            if patch.shape[0] == patch_size and patch.shape[1] == patch_size:
-                result.append(np.expand_dims(patch, axis=0))
-        if len(result) != 0:
-            return np.concatenate(result, axis=0)
-        else:
-            return None
 
     def explore(self):
         # training dataset
