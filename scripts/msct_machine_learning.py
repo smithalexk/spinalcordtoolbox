@@ -18,7 +18,7 @@ import numpy as np
 import itertools
 
 
-def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, batch_size, patch_info, verbose=1):
+def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
     # input: list_gold_images
     # output: list of patches. One patch is a pile of patches from (first) raw images and (second) gold images. Order are respected.
@@ -52,7 +52,7 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
             for gold_image in gold_images:
                 grid_voxel = np.array(gold_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(gold_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                         interpolation_mode=1), (patch_size[0], patch_size[1]))
+                                                         interpolation_mode=0), (patch_size[0], patch_size[1]))
                 patches_gold.append(np.expand_dims(patch, axis=0))
 
         if 'sagittal' in patch_pixdim:
@@ -72,7 +72,7 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
             for gold_image in gold_images:
                 grid_voxel = np.array(gold_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(gold_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                         interpolation_mode=1), (patch_size[0], patch_size[1]))
+                                                         interpolation_mode=0), (patch_size[0], patch_size[1]))
                 patches_gold.append(np.expand_dims(patch, axis=0))
 
         if 'frontal' in patch_pixdim:
@@ -92,7 +92,7 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
             for gold_image in gold_images:
                 grid_voxel = np.array(gold_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(gold_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                         interpolation_mode=1), (patch_size[0], patch_size[1]))
+                                                         interpolation_mode=0), (patch_size[0], patch_size[1]))
                 patches_gold.append(np.expand_dims(patch, axis=0))
 
         patches_raw = np.concatenate(patches_raw, axis=0)
@@ -223,13 +223,14 @@ class FileManager():
                                                      fname_raw_images=fname_raw_images,
                                                      fname_gold_images=fname_gold_images,
                                                      patches_coordinates=patches_coordinates,
-                                                     batch_size=256,
                                                      patch_info=self.patch_info,
                                                      verbose=1)
 
             minibatch_iterator_test = iter_minibatches(stream_data, 10)
             for i, data in enumerate(minibatch_iterator_test):
-                print data['patches_raw'].shape
+                pass
+
+            print 'fin'
 
         return
 
