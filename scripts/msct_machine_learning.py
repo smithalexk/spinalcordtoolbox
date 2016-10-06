@@ -15,9 +15,10 @@ import os
 import sct_utils as sct
 from msct_image import Image
 import numpy as np
+import itertools
 
 
-def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
+def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, batch_size, patch_info, verbose=1):
     # input: list_raw_images
     # input: list_gold_images
     # output: list of patches. One patch is a pile of patches from (first) raw images and (second) gold images. Order are respected.
@@ -30,7 +31,6 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
     raw_images = [Image(path_dataset + fname) for fname in fname_raw_images]
     gold_images = [Image(path_dataset + fname) for fname in fname_gold_images]
 
-    patches_raw, patches_gold = [], []
     for k in range(len(patches_coordinates)):
         ind = [patches_coordinates[k][0], patches_coordinates[k][1], patches_coordinates[k][2]]
         patches_raw, patches_gold = [], []
@@ -46,13 +46,13 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
             for raw_image in raw_images:
                 grid_voxel = np.array(raw_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(raw_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                        interpolation_mode=1), (patch_size, patch_size))
+                                                        interpolation_mode=1), (patch_size[0], patch_size[1]))
                 patches_raw.append(np.expand_dims(patch, axis=0))
 
             for gold_image in gold_images:
                 grid_voxel = np.array(gold_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(gold_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                         interpolation_mode=1), (patch_size, patch_size))
+                                                         interpolation_mode=1), (patch_size[0], patch_size[1]))
                 patches_gold.append(np.expand_dims(patch, axis=0))
 
         if 'sagittal' in patch_pixdim:
@@ -66,13 +66,13 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
             for raw_image in raw_images:
                 grid_voxel = np.array(raw_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(raw_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                        interpolation_mode=1), (patch_size, patch_size))
+                                                        interpolation_mode=1), (patch_size[0], patch_size[1]))
                 patches_raw.append(np.expand_dims(patch, axis=0))
 
             for gold_image in gold_images:
                 grid_voxel = np.array(gold_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(gold_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                         interpolation_mode=1), (patch_size, patch_size))
+                                                         interpolation_mode=1), (patch_size[0], patch_size[1]))
                 patches_gold.append(np.expand_dims(patch, axis=0))
 
         if 'frontal' in patch_pixdim:
@@ -86,26 +86,42 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
             for raw_image in raw_images:
                 grid_voxel = np.array(raw_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(raw_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                        interpolation_mode=1), (patch_size, patch_size))
+                                                        interpolation_mode=1), (patch_size[0], patch_size[1]))
                 patches_raw.append(np.expand_dims(patch, axis=0))
 
             for gold_image in gold_images:
                 grid_voxel = np.array(gold_image.transfo_phys2continuouspix(coord_physical))
                 patch = np.reshape(gold_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
-                                                         interpolation_mode=1), (patch_size, patch_size))
+                                                         interpolation_mode=1), (patch_size[0], patch_size[1]))
                 patches_gold.append(np.expand_dims(patch, axis=0))
 
-        test = np.concatenate(patches_raw, axis=0)
-        print test.shape
+        patches_raw = np.concatenate(patches_raw, axis=0)
+        patches_gold = np.concatenate(patches_gold, axis=0)
 
-        patches_raw.append(np.concatenate(patches_raw, axis=0))
-        patches_gold.append(np.concatenate(patches_gold, axis=0))
+        yield {'patches_raw': patches_raw, 'patches_gold': patches_gold}
 
-    patches_raw = np.concatenate(patches_raw, axis=0)
-    patches_gold = np.concatenate(patches_gold, axis=0)
-    print patches_raw.shape
 
-    return patches_raw, patches_gold
+def get_minibatch(patch_iter, size):
+    """Extract a minibatch of examples, return a tuple X_text, y.
+
+    Note: size is before excluding invalid docs with no topics assigned.
+
+    """
+    data = [(patch['patches_raw'], patch['patches_gold']) for patch in itertools.islice(patch_iter, size)]
+    if not len(data):
+        return np.asarray([], dtype=np.float), np.asarray([], dtype=np.float)
+
+    patches_raw, patches_gold = zip(*data)
+    patches_raw, patches_gold = np.asarray(patches_raw, dtype=np.float), np.asarray(patches_gold, dtype=np.float)
+
+    return {'patches_raw': patches_raw, 'patches_gold': patches_gold}
+
+def iter_minibatches(patch_iter, minibatch_size):
+    """Generator of minibatches."""
+    data = get_minibatch(patch_iter, minibatch_size)
+    while len(data['patches_raw']):
+        yield data
+        data = get_minibatch(patch_iter, minibatch_size)
 
 
 class FileManager():
@@ -191,7 +207,7 @@ class FileManager():
 
         random_batch = np.random.choice(physical_coordinates.shape[0], int(round(physical_coordinates.shape[0] * self.ratio_patches_voxels)))
 
-        return random_batch
+        return physical_coordinates[random_batch]
 
     def explore(self):
         # training dataset
@@ -199,18 +215,21 @@ class FileManager():
             fname_raw_images = self.training_dataset[i][0]
             fname_gold_images = self.training_dataset[i][1]
             reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
-            print fname_raw_images[0]
 
             patches_coordinates = self.compute_patches_coordinates(reference_image)
+            print patches_coordinates.shape
 
-            patches_raw, patches_gold = extract_patches_from_image(path_dataset=self.dataset_path,
-                                                 fname_raw_images=fname_raw_images,
-                                                 fname_gold_images=fname_gold_images,
-                                                 patches_coordinates=patches_coordinates,
-                                                 patch_info=self.patch_info,
-                                                 verbose=1)
+            stream_data = extract_patches_from_image(path_dataset=self.dataset_path,
+                                                     fname_raw_images=fname_raw_images,
+                                                     fname_gold_images=fname_gold_images,
+                                                     patches_coordinates=patches_coordinates,
+                                                     batch_size=256,
+                                                     patch_info=self.patch_info,
+                                                     verbose=1)
 
-
+            minibatch_iterator_test = iter_minibatches(stream_data, 10)
+            for i, data in enumerate(minibatch_iterator_test):
+                print data['patches_raw'].shape
 
         return
 
