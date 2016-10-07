@@ -16,6 +16,8 @@ import sct_utils as sct
 from msct_image import Image
 import numpy as np
 import itertools
+import json
+from progressbar import Bar, ETA, Percentage, ProgressBar, Timer
 
 
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
@@ -109,7 +111,7 @@ def get_minibatch(patch_iter, size):
     """
     data = [(patch['patches_raw'], patch['patches_gold']) for patch in itertools.islice(patch_iter, size)]
     if not len(data):
-        return np.asarray([], dtype=np.float), np.asarray([], dtype=np.float)
+        return {'patches_raw': np.asarray([], dtype=np.float), 'patches_gold': np.asarray([], dtype=np.float)}
 
     patches_raw, patches_gold = zip(*data)
     patches_raw, patches_gold = np.asarray(patches_raw, dtype=np.float), np.asarray(patches_gold, dtype=np.float)
@@ -164,6 +166,10 @@ class FileManager():
             self.ratio_patches_voxels = self.patch_extraction_parameters['ratio_patches_voxels']
         else:
             self.ratio_patches_voxels = 0.1
+        if 'batch_size' in self.patch_extraction_parameters:
+            self.batch_size = self.patch_extraction_parameters['batch_size']
+        else:
+            self.batch_size = 1
 
         # patch_info is the structure that will be transmitted for patches extraction
         self.patch_info = {'patch_size': self.patch_size, 'patch_pixdim': self.patch_pixdim}
@@ -174,7 +180,7 @@ class FileManager():
         self.list_files = np.array(self.fct_explore_dataset(self.dataset_path))
         self.number_of_images = len(self.list_files)
 
-        self.training_dataset, self.testing_dataset, self.validation_dataset = [], [], []
+        self.training_dataset, self.testing_dataset = [], []
 
         # list_classes is a dictionary that contains all the classes that are present in the dataset
         # this list is filled up iteratively while exploring the dataset
@@ -185,15 +191,22 @@ class FileManager():
         # len(class_weights) = len(list_classes)
         self.class_weights = {}
 
-    def decompose_dataset(self):
+    def decompose_dataset(self, path_output):
         array_indexes = range(self.number_of_images)
         np.random.shuffle(array_indexes)
 
-        self.training_dataset = self.list_files[np.ix_(array_indexes[:int(self.ratio_dataset[0]*self.number_of_images)])]
-        self.testing_dataset = self.list_files[np.ix_(array_indexes[int(self.ratio_dataset[0] * self.number_of_images):int((self.ratio_dataset[0] + self.ratio_dataset[1]) * self.number_of_images)])]
-        self.validation_dataset = self.list_files[np.ix_(array_indexes[int((self.ratio_dataset[0] + self.ratio_dataset[1]) * self.number_of_images):])]
+        self.training_dataset = self.list_files[np.ix_(array_indexes[:int(self.ratio_dataset[0] * self.number_of_images)])]
+        self.testing_dataset = self.list_files[np.ix_(array_indexes[int(self.ratio_dataset[0] * self.number_of_images):])]
 
-        return self.training_dataset, self.testing_dataset, self.validation_dataset
+        results = {
+            'training': {'raw_images': [data[0].tolist() for data in self.training_dataset], 'gold_images': [data[1].tolist() for data in self.training_dataset]},
+            'testing': {'raw_images': [data[0].tolist() for data in self.testing_dataset], 'gold_images': [data[1].tolist() for data in self.testing_dataset]},
+            'dataset_path': self.dataset_path
+        }
+        with open(path_output + 'datasets.json', 'w') as outfile:
+            json.dump(results, outfile)
+
+        return self.training_dataset, self.testing_dataset
 
     def compute_patches_coordinates(self, image):
         if self.extract_all_negative or self.extract_all_positive:
@@ -211,6 +224,11 @@ class FileManager():
 
     def explore(self):
         # training dataset
+        global_results_patches = {'patch_info': self.patch_info}
+
+        # TRAINING DATASET
+        results_training = {}
+        classes_training = {}
         for i, fnames in enumerate(self.training_dataset):
             fname_raw_images = self.training_dataset[i][0]
             fname_gold_images = self.training_dataset[i][1]
@@ -226,13 +244,95 @@ class FileManager():
                                                      patch_info=self.patch_info,
                                                      verbose=1)
 
-            minibatch_iterator_test = iter_minibatches(stream_data, 10)
-            for i, data in enumerate(minibatch_iterator_test):
-                labels = center_of_patch_equal_one(data)
+            minibatch_iterator_test = iter_minibatches(stream_data, self.batch_size)
+            labels = []
+            pbar = ProgressBar(widgets=[
+                Timer(),
+                ' ', Percentage(),
+                ' ', Bar(),
+                ' ', ETA()], max_value=patches_coordinates.shape[0])
+            pbar.start()
+            number_done = 0
+            for data in minibatch_iterator_test:
+                labels.extend(center_of_patch_equal_one(data))
+                number_done += data['patches_gold'].shape[0]
+                pbar.update(number_done)
+            pbar.finish()
 
-            print 'fin'
+            classes_in_image, counts = np.unique(labels, return_counts=True)
+            for j, cl in enumerate(classes_in_image):
+                if str(cl) not in classes_training:
+                    classes_training[str(cl)] = [counts[j], 0.0]
+                else:
+                    classes_training[str(cl)][0] += counts[j]
 
-        return
+            results_training[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+
+        global_results_patches['training'] = results_training
+
+        count_max_class, max_class = 0, ''
+        for cl in classes_training:
+            if classes_training[cl][0] > count_max_class:
+                max_class = cl
+        for cl in classes_training:
+            classes_training[cl][1] = classes_training[cl][0] / float(classes_training[max_class][0])
+
+
+        # TESTING DATASET
+        results_testing = {}
+        classes_testing = {}
+        for i, fnames in enumerate(self.testing_dataset):
+            fname_raw_images = self.testing_dataset[i][0]
+            fname_gold_images = self.testing_dataset[i][1]
+            reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
+
+            patches_coordinates = self.compute_patches_coordinates(reference_image)
+            print 'Number of patches in ' + fname_raw_images[0] + ' = ' + str(patches_coordinates.shape[0])
+
+            stream_data = extract_patches_from_image(path_dataset=self.dataset_path,
+                                                     fname_raw_images=fname_raw_images,
+                                                     fname_gold_images=fname_gold_images,
+                                                     patches_coordinates=patches_coordinates,
+                                                     patch_info=self.patch_info,
+                                                     verbose=1)
+
+            minibatch_iterator_test = iter_minibatches(stream_data, self.batch_size)
+            labels = []
+            pbar = ProgressBar(widgets=[
+                Timer(),
+                ' ', Percentage(),
+                ' ', Bar(),
+                ' ', ETA()], max_value=patches_coordinates.shape[0])
+            pbar.start()
+            number_done = 0
+            for data in minibatch_iterator_test:
+                labels.extend(center_of_patch_equal_one(data))
+                number_done += data['patches_gold'].shape[0]
+                pbar.update(number_done)
+            pbar.finish()
+
+            classes_in_image, counts = np.unique(labels, return_counts=True)
+            for j, cl in enumerate(classes_in_image):
+                if str(cl) not in classes_testing:
+                    classes_testing[str(cl)] = [counts[j], 0.0]
+                else:
+                    classes_testing[str(cl)][0] += counts[j]
+
+            results_testing[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+
+        global_results_patches['testing'] = results_testing
+
+        count_max_class, max_class = 0, ''
+        for cl in classes_testing:
+            if classes_testing[cl][0] > count_max_class:
+                max_class = cl
+        for cl in classes_testing:
+            classes_testing[cl][1] = classes_testing[cl][0] / float(classes_testing[max_class][0])
+
+        global_results_patches['statistics'] = {'classes_training': classes_training, 'classes_testing': classes_testing}
+
+        with open(path_output + 'patches.json', 'w') as outfile:
+            json.dump(global_results_patches, outfile)
 
 
 
@@ -267,13 +367,17 @@ def center_of_patch_equal_one(data):
 
 my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/large_nobrain_nopad/',
                               fct_explore_dataset=extract_list_file_from_path,
-                              patch_extraction_parameters={'ratio_dataset': [0.6, 0.2, 0.2],
+                              patch_extraction_parameters={'ratio_dataset': [0.8, 0.2],
+                                                           'ratio_patches_voxels': 0.1,
                                                            'patch_size': [32, 32],
                                                            'patch_pixdim': {'axial': [1.0, 1.0]},
-                                                           'extract_all_positive': True,
-                                                           'extract_all_negative': False},
+                                                           'extract_all_positive': False,
+                                                           'extract_all_negative': False,
+                                                           'batch_size': 500},
                               fct_groundtruth_patch=None)
 
-training_dataset, testing_dataset, validation_dataset = my_file_manager.decompose_dataset()
+path_output = ''
+
+training_dataset, testing_dataset = my_file_manager.decompose_dataset(path_output)
 my_file_manager.explore()
 
