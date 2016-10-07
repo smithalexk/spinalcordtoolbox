@@ -16,8 +16,46 @@ import sct_utils as sct
 from msct_image import Image
 import numpy as np
 import itertools
-import json
+import bz2
+import cPickle as pickle
 from progressbar import Bar, ETA, Percentage, ProgressBar, Timer
+import multiprocessing as mp
+
+import copy_reg
+import types
+
+
+def _pickle_method(method):
+    """
+    Author: Steven Bethard (author of argparse)
+    http://bytes.com/topic/python/answers/552476-why-cant-you-pickle-instancemethods
+    """
+    func_name = method.im_func.__name__
+    obj = method.im_self
+    cls = method.im_class
+    cls_name = ''
+    if func_name.startswith('__') and not func_name.endswith('__'):
+        cls_name = cls.__name__.lstrip('_')
+    if cls_name:
+        func_name = '_' + cls_name + func_name
+    return _unpickle_method, (func_name, obj, cls)
+
+
+def _unpickle_method(func_name, obj, cls):
+    """
+    Author: Steven Bethard
+    http://bytes.com/topic/python/answers/552476-why-cant-you-pickle-instancemethods
+    """
+    for cls in cls.mro():
+        try:
+            func = cls.__dict__[func_name]
+        except KeyError:
+            pass
+        else:
+            break
+    return func.__get__(obj, cls)
+
+copy_reg.pickle(types.MethodType, _pickle_method, _unpickle_method)
 
 
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
@@ -118,15 +156,8 @@ def get_minibatch(patch_iter, size):
 
     return {'patches_raw': patches_raw, 'patches_gold': patches_gold}
 
-def iter_minibatches(patch_iter, minibatch_size):
-    """Generator of minibatches."""
-    data = get_minibatch(patch_iter, minibatch_size)
-    while len(data['patches_raw']):
-        yield data
-        data = get_minibatch(patch_iter, minibatch_size)
 
-
-class FileManager():
+class FileManager(object):
     def __init__(self, dataset_path, fct_explore_dataset, patch_extraction_parameters, fct_groundtruth_patch):
         self.dataset_path = sct.slash_at_the_end(dataset_path, slash=1)
         # This function should take the path to the dataset as input and outputs the list of files (wrt dataset path) that compose the dataset (image + groundtruth)
@@ -191,6 +222,15 @@ class FileManager():
         # len(class_weights) = len(list_classes)
         self.class_weights = {}
 
+        self.cpu_number = mp.cpu_count()
+
+    def iter_minibatches(self, patch_iter, minibatch_size):
+        """Generator of minibatches."""
+        data = get_minibatch(patch_iter, minibatch_size)
+        while len(data['patches_raw']):
+            yield data
+            data = get_minibatch(patch_iter, minibatch_size)
+
     def decompose_dataset(self, path_output):
         array_indexes = range(self.number_of_images)
         np.random.shuffle(array_indexes)
@@ -203,8 +243,9 @@ class FileManager():
             'testing': {'raw_images': [data[0].tolist() for data in self.testing_dataset], 'gold_images': [data[1].tolist() for data in self.testing_dataset]},
             'dataset_path': self.dataset_path
         }
-        with open(path_output + 'datasets.json', 'w') as outfile:
-            json.dump(results, outfile)
+
+        with bz2.BZ2File(path_output + 'datasets.pbz2', 'w') as f:
+            pickle.dump(results, f)
 
         return self.training_dataset, self.testing_dataset
 
@@ -222,16 +263,13 @@ class FileManager():
 
         return physical_coordinates[random_batch]
 
-    def explore(self):
-        # training dataset
-        global_results_patches = {'patch_info': self.patch_info}
+    def worker_explore(self, arguments_worker):
+        try:
+            i = arguments_worker[0]
+            dataset = arguments_worker[1]
 
-        # TRAINING DATASET
-        results_training = {}
-        classes_training = {}
-        for i, fnames in enumerate(self.training_dataset):
-            fname_raw_images = self.training_dataset[i][0]
-            fname_gold_images = self.training_dataset[i][1]
+            fname_raw_images = dataset[i][0]
+            fname_gold_images = dataset[i][1]
             reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
 
             patches_coordinates = self.compute_patches_coordinates(reference_image)
@@ -244,7 +282,7 @@ class FileManager():
                                                      patch_info=self.patch_info,
                                                      verbose=1)
 
-            minibatch_iterator_test = iter_minibatches(stream_data, self.batch_size)
+            minibatch_iterator_test = self.iter_minibatches(stream_data, self.batch_size)
             labels = []
             pbar = ProgressBar(widgets=[
                 Timer(),
@@ -254,19 +292,56 @@ class FileManager():
             pbar.start()
             number_done = 0
             for data in minibatch_iterator_test:
-                labels.extend(center_of_patch_equal_one(data))
-                number_done += data['patches_gold'].shape[0]
-                pbar.update(number_done)
+                if np.ndim(data['patches_gold']) == 4:
+                    labels.extend(center_of_patch_equal_one(data))
+                    number_done += data['patches_gold'].shape[0]
+                    pbar.update(number_done)
             pbar.finish()
 
-            classes_in_image, counts = np.unique(labels, return_counts=True)
-            for j, cl in enumerate(classes_in_image):
-                if str(cl) not in classes_training:
-                    classes_training[str(cl)] = [counts[j], 0.0]
-                else:
-                    classes_training[str(cl)][0] += counts[j]
+            return [i, patches_coordinates, labels]
 
-            results_training[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+        except KeyboardInterrupt:
+            return
+
+        except Exception as e:
+            print 'Error on line {}'.format(sys.exc_info()[-1].tb_lineno)
+            raise e
+
+    def explore(self):
+        # training dataset
+        global_results_patches = {'patch_info': self.patch_info}
+
+        # TRAINING DATASET
+        results_training = {}
+        classes_training = {}
+
+        pool = mp.Pool(processes=self.cpu_number)
+        results = pool.map(self.worker_explore, itertools.izip(range(len(self.training_dataset)), itertools.repeat(self.training_dataset)))
+
+        pool.close()
+        try:
+            pool.join()  # waiting for all the jobs to be done
+            for result in results:
+                i = result[0]
+                patches_coordinates = result[1]
+                labels = result[2]
+                results_training[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+
+                classes_in_image, counts = np.unique(labels, return_counts=True)
+                for j, cl in enumerate(classes_in_image):
+                    if str(cl) not in classes_training:
+                        classes_training[str(cl)] = [counts[j], 0.0]
+                    else:
+                        classes_training[str(cl)][0] += counts[j]
+
+        except KeyboardInterrupt:
+            print "\nWarning: Caught KeyboardInterrupt, terminating workers"
+            pool.terminate()
+            sys.exit(2)
+        except Exception as e:
+            print "Error in FileManager on line {}".format(sys.exc_info()[-1].tb_lineno)
+            print e
+            sys.exit(2)
 
         global_results_patches['training'] = results_training
 
@@ -281,44 +356,34 @@ class FileManager():
         # TESTING DATASET
         results_testing = {}
         classes_testing = {}
-        for i, fnames in enumerate(self.testing_dataset):
-            fname_raw_images = self.testing_dataset[i][0]
-            fname_gold_images = self.testing_dataset[i][1]
-            reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
 
-            patches_coordinates = self.compute_patches_coordinates(reference_image)
-            print 'Number of patches in ' + fname_raw_images[0] + ' = ' + str(patches_coordinates.shape[0])
+        pool = mp.Pool(processes=self.cpu_number)
+        results = pool.map(self.worker_explore, itertools.izip(range(len(self.testing_dataset)), itertools.repeat(self.testing_dataset)))
 
-            stream_data = extract_patches_from_image(path_dataset=self.dataset_path,
-                                                     fname_raw_images=fname_raw_images,
-                                                     fname_gold_images=fname_gold_images,
-                                                     patches_coordinates=patches_coordinates,
-                                                     patch_info=self.patch_info,
-                                                     verbose=1)
+        pool.close()
+        try:
+            pool.join()  # waiting for all the jobs to be done
+            for result in results:
+                i = result[0]
+                patches_coordinates = result[1]
+                labels = result[2]
+                results_testing[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
 
-            minibatch_iterator_test = iter_minibatches(stream_data, self.batch_size)
-            labels = []
-            pbar = ProgressBar(widgets=[
-                Timer(),
-                ' ', Percentage(),
-                ' ', Bar(),
-                ' ', ETA()], max_value=patches_coordinates.shape[0])
-            pbar.start()
-            number_done = 0
-            for data in minibatch_iterator_test:
-                labels.extend(center_of_patch_equal_one(data))
-                number_done += data['patches_gold'].shape[0]
-                pbar.update(number_done)
-            pbar.finish()
+                classes_in_image, counts = np.unique(labels, return_counts=True)
+                for j, cl in enumerate(classes_in_image):
+                    if str(cl) not in classes_testing:
+                        classes_testing[str(cl)] = [counts[j], 0.0]
+                    else:
+                        classes_testing[str(cl)][0] += counts[j]
 
-            classes_in_image, counts = np.unique(labels, return_counts=True)
-            for j, cl in enumerate(classes_in_image):
-                if str(cl) not in classes_testing:
-                    classes_testing[str(cl)] = [counts[j], 0.0]
-                else:
-                    classes_testing[str(cl)][0] += counts[j]
-
-            results_testing[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+        except KeyboardInterrupt:
+            print "\nWarning: Caught KeyboardInterrupt, terminating workers"
+            pool.terminate()
+            sys.exit(2)
+        except Exception as e:
+            print "Error in FileManager on line {}".format(sys.exc_info()[-1].tb_lineno)
+            print e
+            sys.exit(2)
 
         global_results_patches['testing'] = results_testing
 
@@ -331,9 +396,8 @@ class FileManager():
 
         global_results_patches['statistics'] = {'classes_training': classes_training, 'classes_testing': classes_testing}
 
-        with open(path_output + 'patches.json', 'w') as outfile:
-            json.dump(global_results_patches, outfile)
-
+        with bz2.BZ2File(path_output + 'patches.pbz2', 'w') as f:
+            pickle.dump(global_results_patches, f)
 
 
 #########################################
@@ -365,7 +429,7 @@ def center_of_patch_equal_one(data):
     return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
 
 
-my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/large_nobrain_nopad/',
+my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/test_very_small/',
                               fct_explore_dataset=extract_list_file_from_path,
                               patch_extraction_parameters={'ratio_dataset': [0.8, 0.2],
                                                            'ratio_patches_voxels': 0.1,
@@ -376,7 +440,7 @@ my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_au
                                                            'batch_size': 500},
                               fct_groundtruth_patch=None)
 
-path_output = ''
+path_output = '/Users/benjamindeleener/data/data_augmentation/'
 
 training_dataset, testing_dataset = my_file_manager.decompose_dataset(path_output)
 my_file_manager.explore()
