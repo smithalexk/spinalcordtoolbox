@@ -217,7 +217,7 @@ class FileManager():
             reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
 
             patches_coordinates = self.compute_patches_coordinates(reference_image)
-            print patches_coordinates.shape
+            print 'Number of patches in ' + fname_raw_images[0] + ' = ' + str(patches_coordinates.shape[0])
 
             stream_data = extract_patches_from_image(path_dataset=self.dataset_path,
                                                      fname_raw_images=fname_raw_images,
@@ -228,7 +228,7 @@ class FileManager():
 
             minibatch_iterator_test = iter_minibatches(stream_data, 10)
             for i, data in enumerate(minibatch_iterator_test):
-                pass
+                labels = center_of_patch_equal_one(data)
 
             print 'fin'
 
@@ -258,6 +258,11 @@ def extract_list_file_from_path(path_data):
             list_data.append([[fname_im], [f_seg]])
 
     return list_data
+
+
+def center_of_patch_equal_one(data):
+    patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
+    return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
 
 
 my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/large_nobrain_nopad/',
