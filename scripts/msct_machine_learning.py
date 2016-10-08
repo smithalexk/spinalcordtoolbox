@@ -429,6 +429,26 @@ def center_of_patch_equal_one(data):
     return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
 
 
+
+class Model(object):
+    def __init__(self, fname):
+        self.fname = fname
+
+    def load(self):
+        pass
+
+    def save(self, fname_out):
+        pass
+
+    def train(self):
+        pass
+
+    def predict(self):
+        return
+
+
+
+
 my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/test_very_small/',
                               fct_explore_dataset=extract_list_file_from_path,
                               patch_extraction_parameters={'ratio_dataset': [0.8, 0.2],
