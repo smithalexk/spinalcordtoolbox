@@ -447,6 +447,50 @@ class Model(object):
         return
 
 
+from keras.models import Sequential
+from keras.layers.core import Dense, Activation, Dropout, Flatten
+from keras.layers.convolutional import Convolution2D, MaxPooling2D
+from keras.layers.normalization import BatchNormalization
+from keras.optimizers import SGD, Adadelta
+from keras.utils import np_utils
+
+class KerasConvNet(Sequential):
+    def __init__(self):
+        self.add(Convolution2D(32, 3, 3, border_mode='valid', input_shape=(1, patch_size, patch_size)))
+        self.add(Activation('relu'))
+        self.add(Convolution2D(32, 3, 3))
+        self.add(Activation('relu'))
+        self.add(MaxPooling2D(pool_size=(2, 2)))
+        self.add(Dropout(0.25))
+
+        self.add(Convolution2D(64, 3, 3, border_mode='valid'))
+        self.add(Activation('relu'))
+        self.add(Convolution2D(64, 3, 3))
+        self.add(Activation('relu'))
+        self.add(MaxPooling2D(pool_size=(2, 2)))
+        self.add(Dropout(0.25))
+
+        self.add(Flatten())
+        self.add(Dense(256))
+        self.add(Activation('relu'))
+        self.add(Dropout(0.5))
+
+        self.add(Dense(2))
+        self.add(Activation('softmax'))
+
+        ada = Adadelta(lr=0.1, rho=0.95, epsilon=1e-08)
+        self.compile(loss='categorical_crossentropy', optimizer=ada)
+
+    def save(self, fname):
+        pass
+
+    def train(self):
+        pass
+
+    def predict(self):
+        pass
+
+
 
 
 my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/test_very_small/',
