@@ -20,6 +20,7 @@ import json
 import pickle
 from progressbar import Bar, ETA, Percentage, ProgressBar, Timer
 from skimage.feature import hog
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
@@ -347,21 +348,34 @@ class Trainer():
 
         with open(patches_dict_path) as outfile:    
             patches_dict = json.load(outfile)
+        # import bz2
+        # with bz2.BZ2File(datasets_dict_path) as f:
+        #     datasets_dict = pickle.load(f)
+        # with bz2.BZ2File(patches_dict_path) as f:
+        #     patches_dict = pickle.load(f)
 
         self.dataset_path = sct.slash_at_the_end(str(datasets_dict['dataset_path']), slash=1)
+        print self.dataset_path
 
         self.dataset_stats = patches_dict['statistics']
         self.patch_info = patches_dict['patch_info']
+        print self.patch_info
 
         self.training_dataset = datasets_dict['training']
         self.fname_training_raw_images = datasets_dict['training']['raw_images']
         self.fname_training_gold_images = datasets_dict['training']['gold_images']
         self.coord_label_training_patches = patches_dict['training']
+        print self.fname_training_raw_images
+        print len(self.coord_label_training_patches['1'])
+        print len(self.coord_label_training_patches['2'])
+        print len(self.coord_label_training_patches['0'])
 
         self.testing_dataset = datasets_dict['testing']
         self.fname_testing_raw_images = datasets_dict['testing']['raw_images']
         self.fname_testing_gold_images = datasets_dict['testing']['gold_images']
-        self.coord_testing_patches = patches_dict['testing']
+        self.coord_label_testing_patches = patches_dict['testing']
+        print self.fname_testing_raw_images
+        print len(self.coord_label_testing_patches['0'])
 
         self.model_name = classifier_model['model_name']
         self.model = classifier_model['model']
@@ -383,20 +397,20 @@ class Trainer():
         with open(self.train_model_path, 'w') as outfile:
             pickle.dump(self.model, outfile)
 
-    def prepare_patches(self, ratio_patch_per_image=1.0):
+    def prepare_patches(self, fname_raw_images, fname_patch, ratio_patch_per_image=1.0):
 
         coord_prepared = {}
         label_prepared = {}
 
-        for i, fname in enumerate(self.fname_training_raw_images):
-            nb_patches_tot = len(self.coord_label_training_patches[str(i)])
+        for i, fname in enumerate(fname_raw_images):
+            nb_patches_tot = len(fname_patch[str(i)])
             nb_patches_to_extract = int(ratio_patch_per_image * nb_patches_tot)
 
             coord_prepared[str(i)] = []
             label_prepared[str(i)] = []
             for i_patch in range(nb_patches_to_extract):
-                coord_prepared[str(i)].append(self.coord_label_training_patches[str(i)][i_patch][0])
-                label_prepared[str(i)].append(self.coord_label_training_patches[str(i)][i_patch][1])
+                coord_prepared[str(i)].append(fname_patch[str(i)][i_patch][0])
+                label_prepared[str(i)].append(fname_patch[str(i)][i_patch][1])
 
         return coord_prepared, label_prepared
 
@@ -482,20 +496,20 @@ class Trainer():
 
         return {'patches_raw': patches_raw, 'patches_feature': patches_feature, 'patches_label': patches_label}
 
-    def iter_minibatches2(self, coord_dict_train_prepared, label_dict_prepared, minibatch_size):
+    def iter_minibatches2(self, coord_dict_prepared, label_dict_prepared, minibatch_size, fname_dataset):
 
         # temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_gold': np.empty( shape=(0, 0, 0, 0) )} # len=0 
         temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )} # len=0 
 
-        for index_fname_image in coord_dict_train_prepared:
+        for index_fname_image in coord_dict_prepared:
 
-            fname_raw_cur = map(str, self.fname_training_raw_images[int(index_fname_image)])
-            fname_gold_cur = map(str, self.fname_training_gold_images[int(index_fname_image)])
+            fname_raw_cur = map(str, fname_dataset['raw_images'][int(index_fname_image)])
+            fname_gold_cur = map(str, fname_dataset['gold_images'][int(index_fname_image)])
             
             stream_data = self.extract_patch_feature_label_from_image(path_dataset=self.dataset_path,
                                                          fname_raw_images=fname_raw_cur,
                                                          fname_gold_images=fname_gold_cur,
-                                                         patches_coordinates=coord_dict_train_prepared[str(index_fname_image)],
+                                                         patches_coordinates=coord_dict_prepared[str(index_fname_image)],
                                                          patches_labels=label_dict_prepared[str(index_fname_image)])
 
             # stream_data = extract_patches_from_image(path_dataset=self.dataset_path,
@@ -509,22 +523,44 @@ class Trainer():
             # # minibatch = get_minibatch(stream_data, minibatch_size - temp_minibatch['patches_raw'].shape[0])
 
 
-            # if minibatch['patches_raw'].shape[0] == minibatch_size:
-            #     yield minibatch
-            # else:
-            #     if temp_minibatch['patches_raw'].shape[0] == 0:
-            #         temp_minibatch = minibatch # len!=0
-            #     else:
-            #         patches_raw_temp = np.concatenate([temp_minibatch['patches_raw'], minibatch['patches_raw']], axis=0)
-            #         patches_gold_temp = np.concatenate([temp_minibatch['patches_feature'], minibatch['patches_feature']], axis=0)
-            #         patches_gold_temp = np.concatenate([temp_minibatch['patches_label'], minibatch['patches_label']], axis=0)
-            #         minibatch = {'patches_raw': patches_raw_temp, 'patches_feature': patches_feature, 'patches_label': patches_gold_temp} # concat
-            #         if minibatch['patches_raw'].shape[0] == minibatch_size:
-            #             # temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_gold': np.empty( shape=(0, 0, 0, 0) )}
-            #             temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )}
-            #             yield minibatch
-            #         else:
-            #             temp_minibatch = minibatch
+            if minibatch['patches_raw'].shape[0] == minibatch_size:
+                yield minibatch
+            else:
+                if temp_minibatch['patches_raw'].shape[0] == 0:
+                    temp_minibatch = minibatch # len!=0
+                else:
+                    patches_raw_temp = np.concatenate([temp_minibatch['patches_raw'], minibatch['patches_raw']], axis=0)
+                    patches_feature_temp = np.concatenate([temp_minibatch['patches_feature'], minibatch['patches_feature']], axis=0)
+                    patches_gold_temp = np.concatenate([temp_minibatch['patches_label'], minibatch['patches_label']], axis=0)
+                    minibatch = {'patches_raw': patches_raw_temp, 'patches_feature': patches_feature_temp, 'patches_label': patches_gold_temp} # concat
+                    if minibatch['patches_raw'].shape[0] == minibatch_size:
+                        # temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_gold': np.empty( shape=(0, 0, 0, 0) )}
+                        temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )}
+                        yield minibatch
+                    else:
+                        temp_minibatch = minibatch
+
+    def fct_train_test(self, train_batch_iterator, test_batch_iterator):
+        for data in train_batch_iterator:
+            X_train = np.array(data['patches_feature'])
+            y_train = np.array(data['patches_label'])
+            self.model.fit(X_train,y_train)
+
+            y_pred, y_true = [], []
+            for data_test in test_batch_iterator:
+                X_test = np.array(data_test['patches_feature'])
+                print 'Nb Pos: ' + str(sum(data_test['patches_label']))
+                y_true.extend(np.array(data_test['patches_label']))
+
+                y_pred_cur = self.model.predict(X_test)
+                y_pred.extend(y_pred_cur.tolist())
+
+            y_true = np.array(y_true)
+            y_pred = np.array(y_pred)
+            print accuracy_score(y_true, y_pred)
+            print precision_score(y_true, y_pred)
+            print recall_score(y_true, y_pred)
+
 
 #########################################
 # USE CASE
@@ -611,9 +647,12 @@ model_path = '/Users/chgroc/data/spine_detection/model/'
 
 my_trainer = Trainer(datasets_dict_path = path_output + 'datasets.json', patches_dict_path= path_output + 'patches.json', 
                         classifier_model=svm_model,
-                        fct_feature_extraction=extract_patch_feature, 
+                        fct_feature_extraction=extract_hog_feature, 
                         param_training=param_training, 
                         results_path=results_path, model_path=model_path)
 
-coord_prepared, label_prepared = my_trainer.prepare_patches(0.5)
-minibatch_iterator_test = my_trainer.iter_minibatches2(coord_prepared, label_prepared, 1000)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
+minibatch_iterator_train = my_trainer.iter_minibatches2(coord_prepared_train, label_prepared_train, 7500, my_trainer.training_dataset)
+coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
+minibatch_iterator_test = my_trainer.iter_minibatches2(coord_prepared_test, label_prepared_test, 1200, my_trainer.testing_dataset)
+my_trainer.fct_train_test(minibatch_iterator_train, minibatch_iterator_test)
