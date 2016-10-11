@@ -122,6 +122,21 @@ def get_minibatch(patch_iter, size):
 
     return {'patches_raw': patches_raw, 'patches_gold': patches_gold}
 
+
+
+def progress(stats):
+    """Report progress information, return a string."""
+    duration = time.time() - stats['t0']
+    s = str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
+    s += str(test_stats['n_test']) + " test samples (" + str(test_stats['n_test_pos']) + " positive)\n"
+    s += "accuracy: " + str(stats['accuracy']) + "\n"
+    s += "precision: " + str(stats['precision']) + "\n"
+    s += "recall: " + str(stats['recall']) + "\n"
+    s += "fscore: " + str(stats['fscore']) + "\n"
+    s += "in " + str(duration) + "s (" + str(stats['n_train'] / duration) + " samples/sec)"
+    return s
+
+
 class FileManager():
     def __init__(self, dataset_path, fct_explore_dataset, patch_extraction_parameters, fct_groundtruth_patch):
         self.dataset_path = sct.slash_at_the_end(dataset_path, slash=1)
@@ -343,19 +358,25 @@ class FileManager():
 class Trainer():
     def __init__(self, datasets_dict_path, patches_dict_path, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
 
-        with open(datasets_dict_path) as outfile:    
-            datasets_dict = json.load(outfile)
+        # with open(datasets_dict_path) as outfile:    
+        #     datasets_dict = json.load(outfile)
 
-        with open(patches_dict_path) as outfile:    
-            patches_dict = json.load(outfile)
-        # import bz2
-        # with bz2.BZ2File(datasets_dict_path) as f:
-        #     datasets_dict = pickle.load(f)
-        # with bz2.BZ2File(patches_dict_path) as f:
-        #     patches_dict = pickle.load(f)
+        # with open(patches_dict_path) as outfile:    
+        #     patches_dict = json.load(outfile)
+        import cPickle as pickle
+        import bz2
+
+        with bz2.BZ2File(datasets_dict_path, 'rb') as f:
+            datasets_dict = pickle.load(f)
+
+        with bz2.BZ2File(patches_dict_path, 'rb') as f:
+            patches_dict = pickle.load(f)
 
         self.dataset_path = sct.slash_at_the_end(str(datasets_dict['dataset_path']), slash=1)
-        print self.dataset_path
+        print ' '
+        print 'Attention path modifie'
+        self.dataset_path = 'Volumes/folder_shared-1/benjamin/machine_learning/patch_based/vsmall/vsmall_nobrain_nopad/'
+        print ' '
 
         self.dataset_stats = patches_dict['statistics']
         self.patch_info = patches_dict['patch_info']
@@ -366,16 +387,12 @@ class Trainer():
         self.fname_training_gold_images = datasets_dict['training']['gold_images']
         self.coord_label_training_patches = patches_dict['training']
         print self.fname_training_raw_images
-        print len(self.coord_label_training_patches['1'])
-        print len(self.coord_label_training_patches['2'])
-        print len(self.coord_label_training_patches['0'])
 
         self.testing_dataset = datasets_dict['testing']
         self.fname_testing_raw_images = datasets_dict['testing']['raw_images']
         self.fname_testing_gold_images = datasets_dict['testing']['gold_images']
         self.coord_label_testing_patches = patches_dict['testing']
         print self.fname_testing_raw_images
-        print len(self.coord_label_testing_patches['0'])
 
         self.model_name = classifier_model['model_name']
         self.model = classifier_model['model']
@@ -481,11 +498,7 @@ class Trainer():
 
 
     def get_minibatch_patch_feature_label(self, patch_iter, size):
-        """Extract a minibatch of examples, return a tuple X_text, y.
 
-        Note: size is before excluding invalid docs with no topics assigned.
-
-        """
         data = [(patch['patches_raw'], patch['patches_feature'], patch['patches_label']) for patch in itertools.islice(patch_iter, size)]
 
         if not len(data):
@@ -540,6 +553,41 @@ class Trainer():
                     else:
                         temp_minibatch = minibatch
 
+    # def hyperparam_optimization(self, nb_epoch, minibatch_size, hyperparam_dict, ratio_test, evaluation_factor, ratio_patch_per_image, metric_to_optimize):
+
+    #     nb_img_train = int(len(self.fname_training_raw_images) * ratio_test)
+    #     coord_prepared_train, label_prepared_train = self.prepare_patches(self.fname_training_raw_images[:nb_img_train], 
+    #                                                                     self.coord_label_testing_patches[:nb_img_train], 
+    #                                                                     ratio_patch_per_image)
+
+    #     coord_prepared_test, label_prepared_test = self.prepare_patches(self.fname_training_raw_images[nb_img_train:], 
+    #                                                                     self.coord_label_testing_patches[nb_img_train:], 
+    #                                                                     ratio_patch_per_image)
+
+    #     minibatch_iterator_train = self.iter_minibatches2(coord_prepared_train, label_prepared_train, minibatch_size, self.training_dataset)
+    #     minibatch_iterator_test = self.iter_minibatches2(coord_prepared_test, label_prepared_test, minibatch_size, self.testing_dataset)
+
+    #     for param in hyperparam_dict:
+    #      #Grid search function
+    #       for n_epoch in range(nb_epoch):
+    #             for i, batch in enumerate(batch_list_train):
+    #                  batch_cur_train = fct_extraction_batch(batch)
+    #                  batch_feature_train = fct_extraction_feature(batch_cur_train) 
+
+    #                  model.train(batch_feature_train)
+
+    #                 if i % factor_eval:
+    #                       prediction = model.predict(batch_feature_test)
+    #                       score_report += fct_evaluation(prediction, ground_truth)
+    #                       save(score_report)
+    #                       model.save(name)
+
+    #       name_best = find_better_score(score_report, metric_to_optimize) # Find best score for all epoch/batches
+    #       model.save(name_best)
+
+
+
+
     def fct_train_test(self, train_batch_iterator, test_batch_iterator):
         for data in train_batch_iterator:
             X_train = np.array(data['patches_feature'])
@@ -561,6 +609,73 @@ class Trainer():
             print precision_score(y_true, y_pred)
             print recall_score(y_true, y_pred)
 
+    def run_prediction(self, train_batch_iterator, test_batch_iterator, evaluation_factor):
+
+        stats = {'n_train': 0, 'n_train_pos': 0,
+                 'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'fscore': 0.0,
+                 'accuracy_history': [(0, 0)], 'precision_history': [(0, 0)], 'recall_history': [(0, 0)],
+                 'fscore_history': [(0, 0)],
+                 't0': time.time(),
+                 'runtime_history': [(0, 0)], 'total_fit_time': 0.0}
+
+        # Main loop : iterate on mini-batchs of examples
+        print 'start training'
+        for i, (X_train, y_train, patches) in enumerate(train_batch_iterator):
+            
+            tick = time.time()
+
+            # update estimator with examples in the current mini-batch
+            y_train = np_utils.to_categorical(y_train, nb_classes=2)
+            self.model.train_on_batch(X_train, y_train, class_weight=weight_class)
+            stats['total_fit_time'] += time.time() - tick
+            stats['n_train'] += X_train.shape[0]
+            stats['n_train_pos'] += sum(y_train)
+
+            if i % evaluation_factor == 0 and i != 0:
+                print 'Iteration', i
+                stats['prediction_time'] = 0
+                y_pred, y_test = [], []
+
+                for j, (X_test, y_test_cur) in enumerate(test_batch_iterator):
+
+                    # accumulate test accuracy stats
+                    tick = time.time()
+                    y_pred_cur = self.model.predict(X_test, batch_size=32)
+                    stats['prediction_time'] += time.time() - tick
+                    y_pred.extend(np.argmax(y_pred_cur, axis=1).tolist())
+                    y_test.extend(y_test_cur)
+
+                y_test = np.array(y_test)
+                y_pred = np.array(y_pred)
+                stats['accuracy'] = accuracy_score(y_test, y_pred)
+                stats['precision'] = precision_score(y_test, y_pred)
+                stats['recall'] = recall_score(y_test, y_pred)
+                stats['fscore'] = f1_score(y_test, y_pred)
+
+                acc_history = (stats['accuracy'],
+                               stats['n_train'])
+                stats['accuracy_history'].append(acc_history)
+                precision_history = (stats['precision'],
+                                     stats['n_train'])
+                stats['precision_history'].append(precision_history)
+                recall_history = (stats['recall'],
+                                  stats['n_train'])
+                stats['recall_history'].append(recall_history)
+                fscore_history = (stats['fscore'],
+                                  stats['n_train'])
+                stats['fscore_history'].append(fscore_history)
+                run_history = (stats['accuracy'],
+                               total_vect_time + stats['total_fit_time'])
+                stats['runtime_history'].append(run_history)
+
+                pickle.dump(stats, open(self.model_path + '/cnn_results_it' + str(i) + ".p", "wb"))
+                self.model.save(self.model_path + 'model_cnn_it' + str(i) + '.h5')
+
+                print(progress(stats))
+                print('\n')
+
+        pickle.dump(stats, open(self.model_path + 'cnn_results.p', "wb"))
+        self.model.save(self.model_path + 'model_cnn.h5')
 
 #########################################
 # USE CASE
@@ -645,7 +760,7 @@ param_training = {'batch_size': 500, 'number_of_epochs': 1, 'nb_iter_hyperparam_
 results_path = '/Users/chgroc/data/spine_detection/results/'
 model_path = '/Users/chgroc/data/spine_detection/model/'
 
-my_trainer = Trainer(datasets_dict_path = path_output + 'datasets.json', patches_dict_path= path_output + 'patches.json', 
+my_trainer = Trainer(datasets_dict_path = path_output + 'datasets.pbz2', patches_dict_path= path_output + 'patches.pbz2', 
                         classifier_model=svm_model,
                         fct_feature_extraction=extract_hog_feature, 
                         param_training=param_training, 
