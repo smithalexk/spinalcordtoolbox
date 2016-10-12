@@ -21,6 +21,9 @@ import pickle
 from progressbar import Bar, ETA, Percentage, ProgressBar, Timer
 from skimage.feature import hog
 from sklearn.metrics import accuracy_score, precision_score, recall_score
+from hyperopt import fmin, tpe, hp, STATUS_OK, Trials, space_eval
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score, precision_score, recall_score
 
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
@@ -355,44 +358,145 @@ class FileManager():
         with open(path_output + 'patches.json', 'w') as outfile:
             json.dump(global_results_patches, outfile)
 
+
+class Model(object):
+    def __init__(self, fname):
+        self.fname = fname
+
+    def load(self):
+        pass
+
+    def save(self, fname_out):
+        pass
+
+    def train(self):
+        pass
+
+    def predict(self):
+        return
+
+
+from sklearn.base import BaseEstimator
+from sklearn.preprocessing import StandardScaler
+from sklearn import svm
+from sklearn.externals import joblib
+ 
+class Classifier_svm(BaseEstimator):
+    def __init__(self, params={'kernel': 'rbf', 'C': 1.0}):
+        self.clf = svm.SVC()
+        self.scaler = StandardScaler()
+ 
+    def train(self, X, y):
+        self.scaler.fit(X)
+        X = self.scaler.transform(X)
+
+        self.clf.fit(X, y)
+ 
+    def predict(self, X):
+        X = self.scaler.transform(X)
+
+        return self.clf.predict(X)
+
+    def save(self, fname_out):
+        joblib.dump(self.clf, fname_out)
+
+    def load(self, fname_in):
+        clf = joblib.load(fname_in)
+
+        self.clf = clf
+
+        params = clf.get_params()
+        self.C = params['C']
+        self.kernel = params['kernel']
+        self.degree = params['degree']
+        self.gamma = params['gamma']
+        self.class_weight = params['class_weight']
+
+    def set_params(self, params):
+        self.clf.set_params(**params)
+
+from sklearn.svm import LinearSVC
+
+class Classifier_linear_svm(BaseEstimator):
+    def __init__(self, params={'C': 1.0, 'loss': 'hinge', 'penalty':'l1', 'class_weight': 'None'}):
+
+        self.clf = svm.LinearSVC()
+        self.scaler = StandardScaler()
+ 
+    def train(self, X, y):
+        self.scaler.fit(X)
+        X = self.scaler.transform(X)
+
+        self.clf.fit(X, y)
+ 
+    def predict(self, X):
+        X = self.scaler.transform(X)
+        
+        return self.clf.predict(X)
+
+    def save(self, fname_out):
+        joblib.dump(self.clf, fname_out)
+
+    def load(self, fname_in):
+        clf = joblib.load(fname_in)
+
+        self.clf = clf
+
+        params = clf.get_params()
+        self.C = params['C']
+        self.loss = params['loss']
+        self.class_weight = params['class_weight']  
+
+    def set_params(self, params):
+        self.clf.set_params(**params)
+
 class Trainer():
     def __init__(self, datasets_dict_path, patches_dict_path, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
 
-        # with open(datasets_dict_path) as outfile:    
-        #     datasets_dict = json.load(outfile)
+        with open(datasets_dict_path) as outfile:    
+            datasets_dict = json.load(outfile)
 
-        # with open(patches_dict_path) as outfile:    
-        #     patches_dict = json.load(outfile)
-        import cPickle as pickle
-        import bz2
+        with open(patches_dict_path) as outfile:    
+            patches_dict = json.load(outfile)
+        # import cPickle as pickle
+        # import bz2
 
-        with bz2.BZ2File(datasets_dict_path, 'rb') as f:
-            datasets_dict = pickle.load(f)
+        # with bz2.BZ2File(datasets_dict_path, 'rb') as f:
+        #     datasets_dict = pickle.load(f)
 
-        with bz2.BZ2File(patches_dict_path, 'rb') as f:
-            patches_dict = pickle.load(f)
+        # with bz2.BZ2File(patches_dict_path, 'rb') as f:
+        #     patches_dict = pickle.load(f)
 
         self.dataset_path = sct.slash_at_the_end(str(datasets_dict['dataset_path']), slash=1)
-        print ' '
-        print 'Attention path modifie'
-        self.dataset_path = 'Volumes/folder_shared-1/benjamin/machine_learning/patch_based/vsmall/vsmall_nobrain_nopad/'
-        print ' '
+        # print ' '
+        # print 'Attention path modifie'
+        # self.dataset_path = sct.slash_at_the_end('/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/vsmall/vsmall_nobrain_nopad/', slash=1)
+        # print ' '
 
         self.dataset_stats = patches_dict['statistics']
         self.patch_info = patches_dict['patch_info']
-        print self.patch_info
 
         self.training_dataset = datasets_dict['training']
         self.fname_training_raw_images = datasets_dict['training']['raw_images']
         self.fname_training_gold_images = datasets_dict['training']['gold_images']
         self.coord_label_training_patches = patches_dict['training']
         print self.fname_training_raw_images
+        cmpt = 0
+        for i in range(len(self.fname_training_raw_images)):
+            cmpt += len(self.coord_label_training_patches[str(i)])
+        print cmpt
+        print ' '
 
         self.testing_dataset = datasets_dict['testing']
         self.fname_testing_raw_images = datasets_dict['testing']['raw_images']
         self.fname_testing_gold_images = datasets_dict['testing']['gold_images']
         self.coord_label_testing_patches = patches_dict['testing']
         print self.fname_testing_raw_images
+        cmpt = 0
+        for i in range(len(self.fname_testing_raw_images)):
+            cmpt += len(self.coord_label_testing_patches[str(i)])
+        print cmpt
+        print ' '
 
         self.model_name = classifier_model['model_name']
         self.model = classifier_model['model']
@@ -402,17 +506,13 @@ class Trainer():
         self.fct_feature_extraction = fct_feature_extraction
 
         self.param_training = param_training
-        if 'nb_iter_hyperparam_search' in self.param_training:
-            self.nb_iter_hyperparam_search = self.param_training['nb_iter_hyperparam_search']
-        else:
-            self.nb_iter_hyperparam_search = 20
+        self.param_hyperopt = self.param_training['hyperopt']
 
         self.results_path = sct.slash_at_the_end(results_path, slash=1)
         self.model_path = sct.slash_at_the_end(model_path, slash=1)
         self.train_model_path = self.model_path + self.model_name + '_init.pkl'
 
-        with open(self.train_model_path, 'w') as outfile:
-            pickle.dump(self.model, outfile)
+        self.model.save(self.train_model_path)
 
     def prepare_patches(self, fname_raw_images, fname_patch, ratio_patch_per_image=1.0):
 
@@ -553,45 +653,80 @@ class Trainer():
                     else:
                         temp_minibatch = minibatch
 
-    # def hyperparam_optimization(self, nb_epoch, minibatch_size, hyperparam_dict, ratio_test, evaluation_factor, ratio_patch_per_image, metric_to_optimize):
+    def hyperparam_optimization(self, coord_prepared_train, label_prepared_train, ratio_test):
 
-    #     nb_img_train = int(len(self.fname_training_raw_images) * ratio_test)
-    #     coord_prepared_train, label_prepared_train = self.prepare_patches(self.fname_training_raw_images[:nb_img_train], 
-    #                                                                     self.coord_label_testing_patches[:nb_img_train], 
-    #                                                                     ratio_patch_per_image)
+        # Todo: FIND BETTER PARAM a travers data et epoch + save it
 
-    #     coord_prepared_test, label_prepared_test = self.prepare_patches(self.fname_training_raw_images[nb_img_train:], 
-    #                                                                     self.coord_label_testing_patches[nb_img_train:], 
-    #                                                                     ratio_patch_per_image)
+        test_subj_len = int(len(coord_prepared_train) * ratio_test)
+        nb_patch_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train]
+        test_minibatch_size = sum(nb_patch_subj[:test_subj_len])
+        train_minibatch_size = sum(nb_patch_subj[test_subj_len:])
 
-    #     minibatch_iterator_train = self.iter_minibatches2(coord_prepared_train, label_prepared_train, minibatch_size, self.training_dataset)
-    #     minibatch_iterator_test = self.iter_minibatches2(coord_prepared_test, label_prepared_test, minibatch_size, self.testing_dataset)
+        cmpt = 0
+        coord_prepared_train_hyperopt, coord_prepared_test_hyperopt = {}, {}
+        label_prepared_train_hyperopt, label_prepared_test_hyperopt = {}, {}
+        for i in coord_prepared_train:
+            if cmpt < test_subj_len:
+                coord_prepared_test_hyperopt[str(i)] = coord_prepared_train[str(i)]
+                label_prepared_test_hyperopt[str(i)] = label_prepared_train[str(i)]
+            else:
+                coord_prepared_train_hyperopt[str(i)] = coord_prepared_train[str(i)]
+                label_prepared_train_hyperopt[str(i)] = label_prepared_train[str(i)]
+            cmpt += 1
 
-    #     for param in hyperparam_dict:
-    #      #Grid search function
-    #       for n_epoch in range(nb_epoch):
-    #             for i, batch in enumerate(batch_list_train):
-    #                  batch_cur_train = fct_extraction_batch(batch)
-    #                  batch_feature_train = fct_extraction_feature(batch_cur_train) 
+        minibatch_iterator_test = self.iter_minibatches2(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, 
+                                                            test_minibatch_size, self.training_dataset)
+        minibatch_iterator_train = self.iter_minibatches2(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
+                                                            train_minibatch_size, self.training_dataset)
 
-    #                  model.train(batch_feature_train)
+        test_samples = minibatch_iterator_test.next()
+        X_test = np.array(test_samples['patches_feature'])
+        y_true = np.array(test_samples['patches_label'])
 
-    #                 if i % factor_eval:
-    #                       prediction = model.predict(batch_feature_test)
-    #                       score_report += fct_evaluation(prediction, ground_truth)
-    #                       save(score_report)
-    #                       model.save(name)
+        def f_svm(params):
 
-    #       name_best = find_better_score(score_report, metric_to_optimize) # Find best score for all epoch/batches
-    #       model.save(name_best)
+                #   Pour f_nn, cf: https://github.com/fchollet/keras/issues/1591
 
+                self.model.set_params(params)
+                print params
 
+                print 'Training...'
+                self.model.train(X_train, y_train)
+                print '... !'
+                print ' '
+
+                print 'Prediction...'
+                y_pred = self.model.predict(X_test)
+
+                score = self.param_hyperopt['fct'](y_true, y_pred)
+                print score
+                
+                print ' '
+                return {'loss': -score, 'status': STATUS_OK}
+
+        for n_epoch in range(self.param_hyperopt['nb_epoch']):
+            cmpt = 0
+            for data in minibatch_iterator_train:
+                X_train = np.array(data['patches_feature'])
+                y_train = np.array(data['patches_label'])
+
+                trials = Trials()
+                best = fmin(f_svm, self.model_hyperparam, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
+
+                if not cmpt % self.param_hyperopt['eval_factor']:
+                    pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(n_epoch).zfill(3) + '_' + str(cmpt).zfill(3) + '.pkl', "wb"))
+                    pickle.dump(trials.results, open(self.results_path + 'trials_results_' + str(n_epoch).zfill(3) + '_' + str(cmpt).zfill(3) + '.pkl', "wb"))
+
+                print space_eval(self.model_hyperparam, best)
+                cmpt += 1
 
 
     def fct_train_test(self, train_batch_iterator, test_batch_iterator):
         for data in train_batch_iterator:
             X_train = np.array(data['patches_feature'])
             y_train = np.array(data['patches_label'])
+
+            print 'Fitting'
             self.model.fit(X_train,y_train)
 
             y_pred, y_true = [], []
@@ -601,7 +736,7 @@ class Trainer():
                 y_true.extend(np.array(data_test['patches_label']))
 
                 y_pred_cur = self.model.predict(X_test)
-                y_pred.extend(y_pred_cur.tolist())
+                y_pred.extend(np.array(y_pred_cur))
 
             y_true = np.array(y_true)
             y_pred = np.array(y_pred)
@@ -674,8 +809,11 @@ class Trainer():
                 print(progress(stats))
                 print('\n')
 
-        pickle.dump(stats, open(self.model_path + 'cnn_results.p', "wb"))
+        pickle.dump(stats, open(self.model_path + 'cnn_results.pkl', "wb"))
         self.model.save(self.model_path + 'model_cnn.h5')
+
+
+
 
 #########################################
 # USE CASE
@@ -734,13 +872,13 @@ def center_of_patch_equal_one(data):
 
 my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/large_nobrain_nopad/',
                               fct_explore_dataset=extract_list_file_from_path,
-                              patch_extraction_parameters={'ratio_dataset': [0.04, 0.02],
+                              patch_extraction_parameters={'ratio_dataset': [0.08, 0.04],
                                                            'ratio_patches_voxels': 0.001,
                                                            'patch_size': [32, 32],
                                                            'patch_pixdim': {'axial': [1.0, 1.0]},
                                                            'extract_all_positive': False,
                                                            'extract_all_negative': False,
-                                                           'batch_size': 100},
+                                                           'batch_size': 200},
                               fct_groundtruth_patch=None)
 
 path_output = '/Users/chgroc/data/spine_detection/model/'
@@ -749,25 +887,63 @@ path_output = '/Users/chgroc/data/spine_detection/model/'
 # my_file_manager.explore()
 
 from sklearn.svm import SVC
-svm_model = {'model_name': 'SVM', 'model': SVC(), 'model_hyperparam':{'C': [1, 10, 100, 1000], 'kernel': ['linear']}}
+svm_model = {'model_name': 'SVM', 'model': Classifier_svm(SVC), 
+            'model_hyperparam':{'C': hp.uniform('C', 1, 1000),
+                                'kernel': hp.choice('kernel', ['sigmoid', 'poly', 'rbf']),
+                                'gamma': hp.uniform('gamma', 0, 20),
+                                'class_weight': hp.choice('class_weight', [None, 'balanced'])}}
+
+linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(LinearSVC),
+                    'model_hyperparam':{'C': hp.uniform('C', 1, 1000),
+                                        'class_weight': hp.choice('class_weight', [None, 'balanced']),
+                                        'loss': hp.choice('loss', ['hinge', 'squared_hinge'])}}
 
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 
                             'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0,255]}}
 
-param_training = {'batch_size': 500, 'number_of_epochs': 1, 'nb_iter_hyperparam_search': 20, 'patch_size': [32, 32]}
+param_training = {'batch_size': 500, 'number_of_epochs': 1, 'patch_size': [32, 32],
+                 'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
 
 results_path = '/Users/chgroc/data/spine_detection/results/'
 model_path = '/Users/chgroc/data/spine_detection/model/'
 
-my_trainer = Trainer(datasets_dict_path = path_output + 'datasets.pbz2', patches_dict_path= path_output + 'patches.pbz2', 
-                        classifier_model=svm_model,
+my_trainer = Trainer(datasets_dict_path = path_output + 'datasets.json', patches_dict_path= path_output + 'patches.json', 
+                        classifier_model=linear_svm_model,
                         fct_feature_extraction=extract_hog_feature, 
                         param_training=param_training, 
                         results_path=results_path, model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
-minibatch_iterator_train = my_trainer.iter_minibatches2(coord_prepared_train, label_prepared_train, 7500, my_trainer.training_dataset)
-coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
-minibatch_iterator_test = my_trainer.iter_minibatches2(coord_prepared_test, label_prepared_test, 1200, my_trainer.testing_dataset)
-my_trainer.fct_train_test(minibatch_iterator_train, minibatch_iterator_test)
+# coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
+# my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
+
+
+with open(results_path + 'trials_000_000.pkl') as outfile:    
+    trial = pickle.load(outfile)
+
+loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
+idx_best = loss_list.index(min(loss_list))
+best_params = trial[idx_best]['misc']['vals']
+model_hyperparam ={'C': hp.uniform('C', 1, 1000),
+                     'class_weight': hp.choice('class_weight', [None, 'balanced']),
+                      'loss': hp.choice('loss', ['hinge', 'squared_hinge'])}
+
+print dir(model_hyperparam['class_weight'])
+print model_hyperparam['class_weight'].__getitem__(0)
+
+model_hyperparam_opt = {}
+for k in model_hyperparam.keys():
+    if isinstance(best_params[k][0], int ):
+        model_hyperparam_opt[k] = model_hyperparam[k]
+    else:
+        model_hyperparam_opt[k] = best_params[k][0]
+
+print model_hyperparam_opt
+clf = svm.SVC(model_hyperparam_opt)
+print clf.get_params()
+
+# coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
+# minibatch_iterator_train = my_trainer.iter_minibatches2(coord_prepared_train, label_prepared_train, 50000, my_trainer.training_dataset)
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
+# minibatch_iterator_test = my_trainer.iter_minibatches2(coord_prepared_test, label_prepared_test, 1200, my_trainer.testing_dataset)
+# my_trainer.fct_train_test(minibatch_iterator_train, minibatch_iterator_test)
