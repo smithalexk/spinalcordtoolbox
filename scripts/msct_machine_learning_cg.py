@@ -23,7 +23,14 @@ from skimage.feature import hog
 from sklearn.metrics import accuracy_score, precision_score, recall_score
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials, space_eval
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_auc_score, precision_score, recall_score
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score
+from sklearn.base import BaseEstimator
+from sklearn.preprocessing import StandardScaler
+from sklearn import svm
+from sklearn.externals import joblib
+from os import listdir
+from os.path import isfile, join
+import time
 
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
@@ -131,11 +138,11 @@ def progress(stats):
     """Report progress information, return a string."""
     duration = time.time() - stats['t0']
     s = str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
-    s += str(test_stats['n_test']) + " test samples (" + str(test_stats['n_test_pos']) + " positive)\n"
+    s += str(stats['n_test']) + " test samples (" + str(stats['n_test_pos']) + " positive)\n"
     s += "accuracy: " + str(stats['accuracy']) + "\n"
     s += "precision: " + str(stats['precision']) + "\n"
     s += "recall: " + str(stats['recall']) + "\n"
-    s += "fscore: " + str(stats['fscore']) + "\n"
+    s += "roc: " + str(stats['roc']) + "\n"
     s += "in " + str(duration) + "s (" + str(stats['n_train'] / duration) + " samples/sec)"
     return s
 
@@ -360,31 +367,29 @@ class FileManager():
 
 
 class Model(object):
-    def __init__(self, fname):
-        self.fname = fname
+    def __init__(self, params):
+        self.params = params
 
-    def load(self):
+    def load(self, fname_in):
         pass
 
     def save(self, fname_out):
         pass
 
-    def train(self):
+    def train(self, X, y):
         pass
 
-    def predict(self):
+    def predict(self, X):
         return
 
+    def set_params(self, params):
+        pass
 
-from sklearn.base import BaseEstimator
-from sklearn.preprocessing import StandardScaler
-from sklearn import svm
-from sklearn.externals import joblib
- 
 class Classifier_svm(BaseEstimator):
     def __init__(self, params={'kernel': 'rbf', 'C': 1.0}):
         self.clf = svm.SVC()
         self.scaler = StandardScaler()
+        self.params = params
  
     def train(self, X, y):
         self.scaler.fit(X)
@@ -398,10 +403,10 @@ class Classifier_svm(BaseEstimator):
         return self.clf.predict(X)
 
     def save(self, fname_out):
-        joblib.dump(self.clf, fname_out)
+        joblib.dump(self.clf, fname_out + '.pkl')
 
     def load(self, fname_in):
-        clf = joblib.load(fname_in)
+        clf = joblib.load(fname_in + '.pkl')
 
         self.clf = clf
 
@@ -415,13 +420,13 @@ class Classifier_svm(BaseEstimator):
     def set_params(self, params):
         self.clf.set_params(**params)
 
-from sklearn.svm import LinearSVC
 
 class Classifier_linear_svm(BaseEstimator):
-    def __init__(self, params={'C': 1.0, 'loss': 'hinge', 'penalty':'l1', 'class_weight': 'None'}):
+    def __init__(self, params={'C': 1.0, 'loss': 'hinge', 'class_weight': 'None'}):
 
         self.clf = svm.LinearSVC()
         self.scaler = StandardScaler()
+        self.params = params
  
     def train(self, X, y):
         self.scaler.fit(X)
@@ -435,20 +440,21 @@ class Classifier_linear_svm(BaseEstimator):
         return self.clf.predict(X)
 
     def save(self, fname_out):
-        joblib.dump(self.clf, fname_out)
+        joblib.dump(self.clf, fname_out + '.pkl')
 
     def load(self, fname_in):
-        clf = joblib.load(fname_in)
+        clf = joblib.load(fname_in + '.pkl')
 
         self.clf = clf
 
-        params = clf.get_params()
-        self.C = params['C']
-        self.loss = params['loss']
-        self.class_weight = params['class_weight']  
+        self.params = clf.get_params()
+        self.C = self.params['C']
+        self.loss = self.params['loss']
+        self.class_weight = self.params['class_weight']  
 
     def set_params(self, params):
         self.clf.set_params(**params)
+        self.params = params
 
 class Trainer():
     def __init__(self, datasets_dict_path, patches_dict_path, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
@@ -480,23 +486,11 @@ class Trainer():
         self.fname_training_raw_images = datasets_dict['training']['raw_images']
         self.fname_training_gold_images = datasets_dict['training']['gold_images']
         self.coord_label_training_patches = patches_dict['training']
-        print self.fname_training_raw_images
-        cmpt = 0
-        for i in range(len(self.fname_training_raw_images)):
-            cmpt += len(self.coord_label_training_patches[str(i)])
-        print cmpt
-        print ' '
 
         self.testing_dataset = datasets_dict['testing']
         self.fname_testing_raw_images = datasets_dict['testing']['raw_images']
         self.fname_testing_gold_images = datasets_dict['testing']['gold_images']
         self.coord_label_testing_patches = patches_dict['testing']
-        print self.fname_testing_raw_images
-        cmpt = 0
-        for i in range(len(self.fname_testing_raw_images)):
-            cmpt += len(self.coord_label_testing_patches[str(i)])
-        print cmpt
-        print ' '
 
         self.model_name = classifier_model['model_name']
         self.model = classifier_model['model']
@@ -510,11 +504,17 @@ class Trainer():
 
         self.results_path = sct.slash_at_the_end(results_path, slash=1)
         self.model_path = sct.slash_at_the_end(model_path, slash=1)
-        self.train_model_path = self.model_path + self.model_name + '_init.pkl'
+        self.train_model_path = self.model_path + self.model_name + '_init'
 
         self.model.save(self.train_model_path)
 
     def prepare_patches(self, fname_raw_images, fname_patch, ratio_patch_per_image=1.0):
+        ###############################################################################################################
+        #
+        # Output:       Coordinates Dict{'index in datasets.pbz2': [coord[float, float, float], ...], ...}
+        #               Labels Dict{'index in datasets.pbz2': [label(int), ...], ...]}
+        #
+        ###############################################################################################################
 
         coord_prepared = {}
         label_prepared = {}
@@ -532,12 +532,23 @@ class Trainer():
         return coord_prepared, label_prepared
 
 
-    def extract_patch_feature_label_from_image(self, path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patches_labels):
+    def extract_patch_feature_label_from_image(self, path_dataset, fname_raw_images, patches_coordinates, patches_labels):
+        ###############################################################################################################
+        #
+        # Output:       Dict {'patches_raw': (32,32), 'patches_feature': (32,32) or feature vector, 'patches_label': int}
+        #
+        # TODO:         Histogram Normalization
+        #
+        ###############################################################################################################
 
         patch_size = self.patch_info['patch_size']  # [int, int]
         patch_pixdim = self.patch_info['patch_pixdim']  # {'axial': [float, float], 'sagittal': [float, float], 'frontal': [float, float]}
 
         raw_images = [Image(path_dataset + fname) for fname in fname_raw_images]
+
+        # Intensity Normalization
+        for img in raw_images:
+            img.data = 255.0 * (img.data - np.percentile(img.data, 0)) / np.abs(np.percentile(img.data, 0) - np.percentile(img.data, 100))
 
         for k in range(len(patches_coordinates)):
 
@@ -559,6 +570,7 @@ class Trainer():
                     patch = np.reshape(raw_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
                                                             interpolation_mode=1), (patch_size[0], patch_size[1]))
                     patches_raw.append(np.expand_dims(patch, axis=0))
+                    # Feature Extraction
                     patches_feature.append(self.fct_feature_extraction(patch))
 
             if 'sagittal' in patch_pixdim:
@@ -574,6 +586,7 @@ class Trainer():
                     patch = np.reshape(raw_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
                                                             interpolation_mode=1), (patch_size[0], patch_size[1]))
                     patches_raw.append(np.expand_dims(patch, axis=0))
+                    # Feature Extraction
                     patches_feature.append(self.fct_feature_extraction(patch))
 
             if 'frontal' in patch_pixdim:
@@ -589,6 +602,7 @@ class Trainer():
                     patch = np.reshape(raw_image.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]),
                                                             interpolation_mode=1), (patch_size[0], patch_size[1]))
                     patches_raw.append(np.expand_dims(patch, axis=0))
+                    # Feature Extraction
                     patches_feature.append(self.fct_feature_extraction(patch))
 
             patches_raw = np.concatenate(patches_raw, axis=0)
@@ -598,6 +612,13 @@ class Trainer():
 
 
     def get_minibatch_patch_feature_label(self, patch_iter, size):
+    ###############################################################################################################
+    #
+    # Output:       Dict {'patches_raw': (size, nb_channel, 32, 32), 'patches_feature': (size, 32, 32) or (size, feature vector size), 'patches_label': (size,)}
+    #
+    # TODO:         patches_features, patches_label: multichannel case
+    # 
+    ###############################################################################################################
 
         data = [(patch['patches_raw'], patch['patches_feature'], patch['patches_label']) for patch in itertools.islice(patch_iter, size)]
 
@@ -609,9 +630,14 @@ class Trainer():
 
         return {'patches_raw': patches_raw, 'patches_feature': patches_feature, 'patches_label': patches_label}
 
-    def iter_minibatches2(self, coord_dict_prepared, label_dict_prepared, minibatch_size, fname_dataset):
+    def iter_minibatches_trainer(self, coord_dict_prepared, label_dict_prepared, minibatch_size, fname_dataset):
+    ###############################################################################################################
+    #
+    # TODO:         Should be checked
+    #               patches_features, patches_label: multichannel case
+    # 
+    ###############################################################################################################
 
-        # temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_gold': np.empty( shape=(0, 0, 0, 0) )} # len=0 
         temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )} # len=0 
 
         for index_fname_image in coord_dict_prepared:
@@ -620,21 +646,11 @@ class Trainer():
             fname_gold_cur = map(str, fname_dataset['gold_images'][int(index_fname_image)])
             
             stream_data = self.extract_patch_feature_label_from_image(path_dataset=self.dataset_path,
-                                                         fname_raw_images=fname_raw_cur,
-                                                         fname_gold_images=fname_gold_cur,
-                                                         patches_coordinates=coord_dict_prepared[str(index_fname_image)],
-                                                         patches_labels=label_dict_prepared[str(index_fname_image)])
-
-            # stream_data = extract_patches_from_image(path_dataset=self.dataset_path,
-            #                                              fname_raw_images=fname_raw_cur,
-            #                                              fname_gold_images=fname_gold_cur,
-            #                                              patches_coordinates=coord_dict_train_prepared[str(index_fname_image)],
-            #                                              patch_info=self.patch_info,
-            #                                              verbose=1)
+                                                                        fname_raw_images=fname_raw_cur,
+                                                                        patches_coordinates=coord_dict_prepared[str(index_fname_image)],
+                                                                        patches_labels=label_dict_prepared[str(index_fname_image)])
 
             minibatch = self.get_minibatch_patch_feature_label(stream_data, minibatch_size - temp_minibatch['patches_raw'].shape[0])
-            # # minibatch = get_minibatch(stream_data, minibatch_size - temp_minibatch['patches_raw'].shape[0])
-
 
             if minibatch['patches_raw'].shape[0] == minibatch_size:
                 yield minibatch
@@ -647,26 +663,32 @@ class Trainer():
                     patches_gold_temp = np.concatenate([temp_minibatch['patches_label'], minibatch['patches_label']], axis=0)
                     minibatch = {'patches_raw': patches_raw_temp, 'patches_feature': patches_feature_temp, 'patches_label': patches_gold_temp} # concat
                     if minibatch['patches_raw'].shape[0] == minibatch_size:
-                        # temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_gold': np.empty( shape=(0, 0, 0, 0) )}
                         temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )}
                         yield minibatch
                     else:
                         temp_minibatch = minibatch
 
     def hyperparam_optimization(self, coord_prepared_train, label_prepared_train, ratio_test):
+    ###############################################################################################################
+    #
+    # TODO:         X_test, test_minibatch_size: To be discussed with Benjamin
+    #               f_nn: To be adapted to CNN architecture: https://github.com/fchollet/keras/issues/1591
+    #               for data in minibatch_iterator_train: Benjamin ok?
+    #               hp.uniform and hp.choice: To be discussed with Benjamin
+    # 
+    ###############################################################################################################
 
-        # Todo: FIND BETTER PARAM a travers data et epoch + save it
+        nb_subj_test = int(len(coord_prepared_train) * ratio_test) # Nb subjects used for hyperopt testing
+        nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
+        test_minibatch_size = sum(nb_patch_all_train_subj[:nb_subj_test]) # Define minibatch size used for hyperopt testing
+        train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
 
-        test_subj_len = int(len(coord_prepared_train) * ratio_test)
-        nb_patch_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train]
-        test_minibatch_size = sum(nb_patch_subj[:test_subj_len])
-        train_minibatch_size = sum(nb_patch_subj[test_subj_len:])
-
+        # Split coord_prepared_train and label_prepared_train for hyperopt training and testing
         cmpt = 0
         coord_prepared_train_hyperopt, coord_prepared_test_hyperopt = {}, {}
         label_prepared_train_hyperopt, label_prepared_test_hyperopt = {}, {}
         for i in coord_prepared_train:
-            if cmpt < test_subj_len:
+            if cmpt < nb_subj_test:
                 coord_prepared_test_hyperopt[str(i)] = coord_prepared_train[str(i)]
                 label_prepared_test_hyperopt[str(i)] = label_prepared_train[str(i)]
             else:
@@ -674,34 +696,34 @@ class Trainer():
                 label_prepared_train_hyperopt[str(i)] = label_prepared_train[str(i)]
             cmpt += 1
 
-        minibatch_iterator_test = self.iter_minibatches2(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, 
+        # Create minibatch iterators for hyperopt training and testing
+        minibatch_iterator_test = self.iter_minibatches_trainer(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, 
                                                             test_minibatch_size, self.training_dataset)
-        minibatch_iterator_train = self.iter_minibatches2(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
+        minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
                                                             train_minibatch_size, self.training_dataset)
 
         test_samples = minibatch_iterator_test.next()
         X_test = np.array(test_samples['patches_feature'])
         y_true = np.array(test_samples['patches_label'])
 
+        # Create hyperopt dict compatible with hyperopt Lib
+        model_hyperparam_hyperopt = {}                             
+        for param in self.model_hyperparam:
+            param_cur = self.model_hyperparam[param]
+            if all([isinstance(item, int) for item in param_cur]) and len(param_cur) == 2:
+                model_hyperparam_hyperopt[param] = hp.uniform(param, param_cur[0], param_cur[1])
+            else:
+                model_hyperparam_hyperopt[param] = hp.choice(param, param_cur)
+
         def f_svm(params):
 
-                #   Pour f_nn, cf: https://github.com/fchollet/keras/issues/1591
-
                 self.model.set_params(params)
-                print params
 
-                print 'Training...'
                 self.model.train(X_train, y_train)
-                print '... !'
-                print ' '
 
-                print 'Prediction...'
                 y_pred = self.model.predict(X_test)
 
                 score = self.param_hyperopt['fct'](y_true, y_pred)
-                print score
-                
-                print ' '
                 return {'loss': -score, 'status': STATUS_OK}
 
         for n_epoch in range(self.param_hyperopt['nb_epoch']):
@@ -711,81 +733,128 @@ class Trainer():
                 y_train = np.array(data['patches_label'])
 
                 trials = Trials()
-                best = fmin(f_svm, self.model_hyperparam, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
+                best = fmin(f_svm, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
 
                 if not cmpt % self.param_hyperopt['eval_factor']:
                     pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(n_epoch).zfill(3) + '_' + str(cmpt).zfill(3) + '.pkl', "wb"))
-                    pickle.dump(trials.results, open(self.results_path + 'trials_results_' + str(n_epoch).zfill(3) + '_' + str(cmpt).zfill(3) + '.pkl', "wb"))
 
-                print space_eval(self.model_hyperparam, best)
                 cmpt += 1
 
+    def set_hyperopt(self):
+    ###############################################################################################################
+    #
+    # - Open all trials_*.pkl generated by hyperparam_optimization
+    # - Find better score: save related trials_*.pkl file as trials_best.pkl
+    # - Set optimized params to self.model and save it as self.model_name + '_opt' 
+    # 
+    ###############################################################################################################
 
-    def fct_train_test(self, train_batch_iterator, test_batch_iterator):
-        for data in train_batch_iterator:
-            X_train = np.array(data['patches_feature'])
-            y_train = np.array(data['patches_label'])
+        fname_trials = [f for f in listdir(self.results_path) if isfile(join(self.results_path, f)) and f.startswith('trials')]
 
-            print 'Fitting'
-            self.model.fit(X_train,y_train)
+        trials_score_list = []
+        for f in fname_trials:
+            with open(results_path + f) as outfile:    
+                trial = pickle.load(outfile)
+                outfile.close()
+            loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
+            trials_score_list.append(min(loss_list))
 
-            y_pred, y_true = [], []
-            for data_test in test_batch_iterator:
-                X_test = np.array(data_test['patches_feature'])
-                print 'Nb Pos: ' + str(sum(data_test['patches_label']))
-                y_true.extend(np.array(data_test['patches_label']))
+        idx_best_trial = trials_score_list.index(min(trials_score_list))
+        with open(results_path + fname_trials[idx_best_trial]) as outfile:    
+            best_trial = pickle.load(outfile)
+            pickle.dump(best_trial, open(self.results_path + 'trials_best.pkl', "wb"))
+            outfile.close()
 
-                y_pred_cur = self.model.predict(X_test)
-                y_pred.extend(np.array(y_pred_cur))
+        loss_list = [best_trial[i]['result']['loss'] for i in range(len(best_trial))]
+        idx_best_params = loss_list.index(min(loss_list))
+        best_params = best_trial[idx_best_params]['misc']['vals']
 
-            y_true = np.array(y_true)
-            y_pred = np.array(y_pred)
-            print accuracy_score(y_true, y_pred)
-            print precision_score(y_true, y_pred)
-            print recall_score(y_true, y_pred)
+        model_hyperparam_opt = {}
+        for k in self.model_hyperparam.keys():
+            if isinstance(best_params[k][0], int):
+                model_hyperparam_opt[k] = self.model_hyperparam[k][best_params[k][0]]
+            else:
+                model_hyperparam_opt[k] = float(best_params[k][0])
 
-    def run_prediction(self, train_batch_iterator, test_batch_iterator, evaluation_factor):
+        self.model.set_params(model_hyperparam_opt)
+        self.train_model_path = self.model_path + self.model_name + '_opt'
+        self.model.save(self.train_model_path)
+
+    def run_prediction(self, coord_train, label_train, coord_test, label_test):
+    ###############################################################################################################
+    #
+    # TODO:     Check CNN compatibility
+    #           for data in minibatch_iterator_train: Benjamin ok?
+    #           Commented lines: used in msct_keras_classification
+    # 
+    ###############################################################################################################
+
+        if 'minibatch_size_train' in self.param_training:
+            minibatch_size_train = self.param_training['minibatch_size_train']
+        else:
+            minibatch_size_train = sum([len(coord_train[str(i)]) for i in coord_train])
+
+        minibatch_iterator_train = self.iter_minibatches_trainer(coord_train, label_train, 
+                                                            minibatch_size_train, self.training_dataset)
+
+        if 'minibatch_size_test' in self.param_training:
+            minibatch_size_test = self.param_training['minibatch_size_test']
+        else:
+            minibatch_size_test = sum([len(coord_test[str(i)]) for i in coord_test])
+
+        minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
+                                                            minibatch_size_test, self.testing_dataset)
 
         stats = {'n_train': 0, 'n_train_pos': 0,
-                 'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'fscore': 0.0,
+                 'n_test': 0, 'n_test_pos': 0,
+                 'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'roc': 0.0,
                  'accuracy_history': [(0, 0)], 'precision_history': [(0, 0)], 'recall_history': [(0, 0)],
-                 'fscore_history': [(0, 0)],
+                 'roc_history': [(0, 0)],
                  't0': time.time(),
                  'runtime_history': [(0, 0)], 'total_fit_time': 0.0}
+        total_vect_time = 0.0
 
-        # Main loop : iterate on mini-batchs of examples
-        print 'start training'
-        for i, (X_train, y_train, patches) in enumerate(train_batch_iterator):
-            
+        print 'Start Training'
+        cmpt_train = 0
+        for data_train in minibatch_iterator_train:
+            X_train = data_train['patches_feature']
+            y_train = data_train['patches_label']
             tick = time.time()
 
-            # update estimator with examples in the current mini-batch
-            y_train = np_utils.to_categorical(y_train, nb_classes=2)
-            self.model.train_on_batch(X_train, y_train, class_weight=weight_class)
+            # y_train = np_utils.to_categorical(y_train, nb_classes=2)
+            # self.model.train_on_batch(X_train, y_train, class_weight=weight_class)
+            self.model.train(X_train, y_train)
             stats['total_fit_time'] += time.time() - tick
             stats['n_train'] += X_train.shape[0]
             stats['n_train_pos'] += sum(y_train)
 
-            if i % evaluation_factor == 0 and i != 0:
-                print 'Iteration', i
+            # if cmpt_train % int(self.param_hyperopt['eval_factor']) == 0 and cmpt_train != 0:
+            if cmpt_train % int(self.param_hyperopt['eval_factor']) == 0:
+
+                print 'Iteration', cmpt_train
                 stats['prediction_time'] = 0
                 y_pred, y_test = [], []
 
-                for j, (X_test, y_test_cur) in enumerate(test_batch_iterator):
+                for data_test in minibatch_iterator_test:
+                    X_test = data_test['patches_feature']
+                    y_test_cur = data_test['patches_label']
 
-                    # accumulate test accuracy stats
                     tick = time.time()
-                    y_pred_cur = self.model.predict(X_test, batch_size=32)
+                    # y_pred_cur = self.model.predict(X_test, batch_size=32)
+                    y_pred_cur = self.model.predict(X_test)
                     stats['prediction_time'] += time.time() - tick
-                    y_pred.extend(np.argmax(y_pred_cur, axis=1).tolist())
+                    # y_pred.extend(np.argmax(y_pred_cur, axis=1).tolist())
+                    y_pred.extend(y_pred_cur)
                     y_test.extend(y_test_cur)
+                    stats['n_test'] += X_test.shape[0]
+                    stats['n_test_pos'] += sum(y_test_cur)
 
                 y_test = np.array(y_test)
                 y_pred = np.array(y_pred)
                 stats['accuracy'] = accuracy_score(y_test, y_pred)
                 stats['precision'] = precision_score(y_test, y_pred)
                 stats['recall'] = recall_score(y_test, y_pred)
-                stats['fscore'] = f1_score(y_test, y_pred)
+                stats['roc'] = roc_auc_score(y_test, y_pred)
 
                 acc_history = (stats['accuracy'],
                                stats['n_train'])
@@ -796,21 +865,24 @@ class Trainer():
                 recall_history = (stats['recall'],
                                   stats['n_train'])
                 stats['recall_history'].append(recall_history)
-                fscore_history = (stats['fscore'],
+                roc_history = (stats['roc'],
                                   stats['n_train'])
-                stats['fscore_history'].append(fscore_history)
+                stats['roc_history'].append(roc_history)
                 run_history = (stats['accuracy'],
                                total_vect_time + stats['total_fit_time'])
                 stats['runtime_history'].append(run_history)
 
-                pickle.dump(stats, open(self.model_path + '/cnn_results_it' + str(i) + ".p", "wb"))
-                self.model.save(self.model_path + 'model_cnn_it' + str(i) + '.h5')
+                pickle.dump(stats, open(self.results_path + self.model_name + '_pred_it_' + str(cmpt_train).zfill(3) + '.pkl', "wb"))
+                self.model.save(self.model_path + self.model_name + '_pred_it_' + str(cmpt_train).zfill(3))
 
                 print(progress(stats))
                 print('\n')
 
-        pickle.dump(stats, open(self.model_path + 'cnn_results.pkl', "wb"))
-        self.model.save(self.model_path + 'model_cnn.h5')
+            cmpt_train += 1
+
+        pickle.dump(stats, open(self.results_path + self.model_name + '_pred.pkl', "wb"))
+        self.model.save(self.model_path + self.model_name + '_pred')
+
 
 
 
@@ -881,69 +953,41 @@ my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/ma
                                                            'batch_size': 200},
                               fct_groundtruth_patch=None)
 
-path_output = '/Users/chgroc/data/spine_detection/model/'
+results_path = '/Users/chgroc/data/spine_detection/results/'
+model_path = '/Users/chgroc/data/spine_detection/model/'
 
-# training_dataset, testing_dataset = my_file_manager.decompose_dataset(path_output)
+# training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
 # my_file_manager.explore()
 
-from sklearn.svm import SVC
-svm_model = {'model_name': 'SVM', 'model': Classifier_svm(SVC), 
-            'model_hyperparam':{'C': hp.uniform('C', 1, 1000),
-                                'kernel': hp.choice('kernel', ['sigmoid', 'poly', 'rbf']),
-                                'gamma': hp.uniform('gamma', 0, 20),
-                                'class_weight': hp.choice('class_weight', [None, 'balanced'])}}
+svm_model = {'model_name': 'SVM', 'model': Classifier_svm(svm.SVC),
+            'model_hyperparam':{'C': [1, 1000],
+                                'kernel': ['sigmoid', 'poly', 'rbf'],
+                                'gamma': [0, 20],
+                                'class_weight': [None, 'balanced']}}
 
-linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(LinearSVC),
-                    'model_hyperparam':{'C': hp.uniform('C', 1, 1000),
-                                        'class_weight': hp.choice('class_weight', [None, 'balanced']),
-                                        'loss': hp.choice('loss', ['hinge', 'squared_hinge'])}}
+linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(svm.LinearSVC),
+                    'model_hyperparam':{'C': [1, 1000],
+                                        'class_weight': [None, 'balanced'],
+                                        'loss': ['hinge', 'squared_hinge']}}
 
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 
                             'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0,255]}}
 
-param_training = {'batch_size': 500, 'number_of_epochs': 1, 'patch_size': [32, 32],
-                 'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
+param_training = {'number_of_epochs': 1, 'patch_size': [32, 32],
+                    # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
+                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':100, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
 
-results_path = '/Users/chgroc/data/spine_detection/results/'
-model_path = '/Users/chgroc/data/spine_detection/model/'
-
-my_trainer = Trainer(datasets_dict_path = path_output + 'datasets.json', patches_dict_path= path_output + 'patches.json', 
+### Attention .json et .pbz2 : modif à faire dans Trainer.__init__
+my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json', patches_dict_path= model_path + 'patches.json', 
                         classifier_model=linear_svm_model,
                         fct_feature_extraction=extract_hog_feature, 
                         param_training=param_training, 
                         results_path=results_path, model_path=model_path)
 
-# coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
-# my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
+coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
 
-
-with open(results_path + 'trials_000_000.pkl') as outfile:    
-    trial = pickle.load(outfile)
-
-loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
-idx_best = loss_list.index(min(loss_list))
-best_params = trial[idx_best]['misc']['vals']
-model_hyperparam ={'C': hp.uniform('C', 1, 1000),
-                     'class_weight': hp.choice('class_weight', [None, 'balanced']),
-                      'loss': hp.choice('loss', ['hinge', 'squared_hinge'])}
-
-print dir(model_hyperparam['class_weight'])
-print model_hyperparam['class_weight'].__getitem__(0)
-
-model_hyperparam_opt = {}
-for k in model_hyperparam.keys():
-    if isinstance(best_params[k][0], int ):
-        model_hyperparam_opt[k] = model_hyperparam[k]
-    else:
-        model_hyperparam_opt[k] = best_params[k][0]
-
-print model_hyperparam_opt
-clf = svm.SVC(model_hyperparam_opt)
-print clf.get_params()
-
-# coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
-# minibatch_iterator_train = my_trainer.iter_minibatches2(coord_prepared_train, label_prepared_train, 50000, my_trainer.training_dataset)
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
-# minibatch_iterator_test = my_trainer.iter_minibatches2(coord_prepared_test, label_prepared_test, 1200, my_trainer.testing_dataset)
-# my_trainer.fct_train_test(minibatch_iterator_train, minibatch_iterator_test)
+my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
+my_trainer.set_hyperopt()
+my_trainer.run_prediction(coord_prepared_train, label_prepared_train, coord_prepared_test, label_prepared_test)
