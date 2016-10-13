@@ -476,8 +476,24 @@ from keras.optimizers import SGD, Adadelta
 from keras.utils import np_utils
 
 class KerasConvNet(Sequential):
-    def __init__(self):
-        self.add(Convolution2D(32, 3, 3, border_mode='valid', input_shape=(1, patch_size, patch_size)))
+    def __init__(self, params):
+        super(KerasConvNet, self).__init__()
+        self.params = params
+
+        if 'patch_size' in self.params:
+            self.patch_size = self.params['patch_size']  # must be a list of two elements
+        else:
+            self.patch_size = [32, 32]
+        if 'number_of_channels' in self.params:
+            self.number_of_channels = self.params['number_of_channels']
+        else:
+            self.number_of_channels = 1
+        if 'batch_size' in self.params:
+            self.batch_size = self.params['batch_size']
+        else:
+            self.batch_size = 256
+
+        self.add(Convolution2D(32, 3, 3, border_mode='valid', input_shape=(self.number_of_channels, self.patch_size[0], self.patch_size[1])))
         self.add(Activation('relu'))
         self.add(Convolution2D(32, 3, 3))
         self.add(Activation('relu'))
@@ -502,16 +518,25 @@ class KerasConvNet(Sequential):
         ada = Adadelta(lr=0.1, rho=0.95, epsilon=1e-08)
         self.compile(loss='categorical_crossentropy', optimizer=ada)
 
-    def save(self, fname):
-        pass
+    def save(self, fname_out):
+        self.save_weights(fname_out + '.h5')
 
-    def train(self):
-        pass
+    def load(self, fname_in):
+        self.load_weights(fname_in + '.h5')
 
-    def predict(self):
-        pass
+    def train(self, X, y):
+        self.train_on_batch(X, y, class_weight=self.weight_class)
 
+    def predict(self, X):
+        return super(KerasConvNet, self).predict(X, batch_size=self.batch_size)
 
+    def set_params(self, params):
+        if 'patch_size' in self.params:
+            self.patch_size = self.params['patch_size']  # must be a list of two elements
+        if 'number_of_channels' in self.params:
+            self.number_of_channels = self.params['number_of_channels']
+        if 'batch_size' in self.params:
+            self.batch_size = self.params['batch_size']
 
 
 my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/test_very_small/',
