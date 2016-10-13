@@ -671,9 +671,7 @@ class Trainer():
     def hyperparam_optimization(self, coord_prepared_train, label_prepared_train, ratio_test):
     ###############################################################################################################
     #
-    # TODO:         X_test, test_minibatch_size: To be discussed with Benjamin
-    #               f_nn: To be adapted to CNN architecture: https://github.com/fchollet/keras/issues/1591
-    #               for data in minibatch_iterator_train: Benjamin ok?
+    # TODO:         f_nn: To be adapted to CNN architecture: https://github.com/fchollet/keras/issues/1591
     #               hp.uniform and hp.choice: To be discussed with Benjamin
     # 
     ###############################################################################################################
@@ -726,13 +724,13 @@ class Trainer():
         def f_svm(params):
 
                 self.model.set_params(params)
-
+                tick = time.time()
                 self.model.train(X_train, y_train)
-
+                toc = time.time()-tick
                 y_pred = self.model.predict(X_test)
 
                 score = self.param_hyperopt['fct'](y_true, y_pred)
-                return {'loss': -score, 'status': STATUS_OK}
+                return {'loss': -score, 'status': STATUS_OK, 'eval_time': toc}
 
         for n_epoch in range(self.param_hyperopt['nb_epoch']):
             cmpt = 0
@@ -757,20 +755,27 @@ class Trainer():
     # 
     ###############################################################################################################
 
-        fname_trials = [f for f in listdir(self.results_path) if isfile(join(self.results_path, f)) and f.startswith('trials')]
+        fname_trials = [f for f in listdir(self.results_path) if isfile(join(self.results_path, f)) and f.startswith('trials_')]
 
         trials_score_list = []
+        trials_eval_time_list = []
         for f in fname_trials:
             with open(results_path + f) as outfile:    
                 trial = pickle.load(outfile)
                 outfile.close()
             loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
+            eval_time_list = [trial[i]['result']['eval_time'] for i in range(len(trial))]
             trials_score_list.append(min(loss_list))
+            trials_eval_time_list.append(sum(eval_time_list))
+
+        print ' '
+        print 'Training time: ' + str(round(sum(trials_eval_time_list),3)) + 's'    
+        print ' '
 
         idx_best_trial = trials_score_list.index(min(trials_score_list))
         with open(results_path + fname_trials[idx_best_trial]) as outfile:    
             best_trial = pickle.load(outfile)
-            pickle.dump(best_trial, open(self.results_path + 'trials_best.pkl', "wb"))
+            pickle.dump(best_trial, open(self.results_path + 'best_trial.pkl', "wb"))
             outfile.close()
 
         loss_list = [best_trial[i]['result']['loss'] for i in range(len(best_trial))]
@@ -986,16 +991,16 @@ param_training = {'number_of_epochs': 1, 'patch_size': [32, 32],
                     # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
                     'hyperopt': {'algo':tpe.suggest, 'nb_eval':100, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
 
-### Attention .json et .pbz2 : modif à faire dans Trainer.__init__
+### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
 my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json', patches_dict_path= model_path + 'patches.json', 
                         classifier_model=linear_svm_model,
                         fct_feature_extraction=extract_hog_feature, 
                         param_training=param_training, 
                         results_path=results_path, model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
-coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
+# coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
 
-my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
+# my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
 my_trainer.set_hyperopt()
-my_trainer.run_prediction(coord_prepared_train, label_prepared_train, coord_prepared_test, label_prepared_test)
+# my_trainer.run_prediction(coord_prepared_train, label_prepared_train, coord_prepared_test, label_prepared_test)
