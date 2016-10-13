@@ -31,7 +31,7 @@ from sklearn.externals import joblib
 from os import listdir
 from os.path import isfile, join
 import time
-
+import random 
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
     # input: list_gold_images
@@ -151,7 +151,7 @@ def progress_train(stats):
     """Report progress information, return a string."""
     s = str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
 
-    if stats['total_hyperopt_time']
+    if stats['total_hyperopt_time']:
         s += "Hyper param optimization in: " + str(stats['total_hyperopt_time']) + "s\n"
 
     s += "Training in: " + str(stats['total_fit_time']) + "s"
@@ -469,7 +469,7 @@ class Classifier_linear_svm(BaseEstimator):
         self.params = params
 
 class Trainer():
-    def __init__(self, datasets_dict_path, patches_dict_path, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
+    def __init__(self, datasets_dict_path, patches_dict_path, patches_pos_dict_path, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
 
         with open(datasets_dict_path) as outfile:    
             datasets_dict = json.load(outfile)
@@ -498,6 +498,8 @@ class Trainer():
         self.fname_training_raw_images = datasets_dict['training']['raw_images']
         self.fname_training_gold_images = datasets_dict['training']['gold_images']
         self.coord_label_training_patches = patches_dict['training']
+        if patches_pos_dict_path is not None:
+            self.coord_label_training_patches_pos = patches_pos_dict_path['training']
 
         self.testing_dataset = datasets_dict['testing']
         self.fname_testing_raw_images = datasets_dict['testing']['raw_images']
@@ -517,6 +519,11 @@ class Trainer():
         self.param_training = param_training
         self.param_hyperopt = self.param_training['hyperopt']
 
+        if 'ratio_patch_per_img' in self.param_training:
+            self.ratio_patch_per_img = self.param_training['ratio_patch_per_img']
+        else:
+            self.ratio_patch_per_img = 1.0
+
         self.results_path = sct.slash_at_the_end(results_path, slash=1)
         self.model_path = sct.slash_at_the_end(model_path, slash=1)
 
@@ -528,7 +535,7 @@ class Trainer():
                         't0': time.time(),
                         'runtime_history': [(0, 0)], 'total_fit_time': 0.0, 'total_hyperopt_time': 0.0}
 
-    def prepare_patches(self, fname_raw_images, fname_patch, ratio_patch_per_image=1.0):
+    def prepare_patches(self, fname_raw_images, coord_label_patches, coord_label_patches_pos = None):
         ###############################################################################################################
         #
         # Output:       Coordinates Dict{'index in datasets.pbz2': [coord[float, float, float], ...], ...}
@@ -536,18 +543,35 @@ class Trainer():
         #
         ###############################################################################################################
 
-        coord_prepared = {}
-        label_prepared = {}
+        coord_prepared, label_prepared = {}, {}
 
         for i, fname in enumerate(fname_raw_images):
-            nb_patches_tot = len(fname_patch[str(i)])
-            nb_patches_to_extract = int(ratio_patch_per_image * nb_patches_tot)
 
-            coord_prepared[str(i)] = []
-            label_prepared[str(i)] = []
+            coord_prepared_tmp, label_prepared_tmp = [], []
+
+            if coord_label_patches_pos is not None:
+                nb_patches_pos_tot = len(coord_label_patches_pos[str(i)])
+                nb_patches_pos_to_extract = int(self.ratio_patch_per_img * nb_patches_pos_tot)
+
+                for i_patch_pos in range(nb_patches_pos_to_extract):
+                    coord_prepared_tmp.append(coord_label_patches_pos[str(i)][i_patch_pos][0])
+                    label_prepared_tmp.append(coord_label_patches_pos[str(i)][i_patch_pos][1])
+
+            else:
+                print 'If a label class balance is expected: Please provide Coordinates of positive patches'
+
+            nb_patches_tot = len(coord_label_patches[str(i)])
+            nb_patches_to_extract = int(self.ratio_patch_per_img * nb_patches_tot)
+
             for i_patch in range(nb_patches_to_extract):
-                coord_prepared[str(i)].append(fname_patch[str(i)][i_patch][0])
-                label_prepared[str(i)].append(fname_patch[str(i)][i_patch][1])
+                coord_prepared_tmp.append(coord_label_patches[str(i)][i_patch][0])
+                label_prepared_tmp.append(coord_label_patches[str(i)][i_patch][1])
+
+            index_shuf = range(len(coord_prepared_tmp))
+            np.random.shuffle(index_shuf)
+
+            coord_prepared[str(i)] = [coord_prepared_tmp[idx] for idx in index_shuf]
+            label_prepared[str(i)] = [label_prepared_tmp[idx] for idx in index_shuf]
 
         return coord_prepared, label_prepared
 
@@ -1014,20 +1038,21 @@ methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cut
                             'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0,255]}}
 
-param_training = {'number_of_epochs': 1, 'patch_size': [32, 32],
+param_training = {'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
                     # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
                     'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
 
 ### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
-my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json', patches_dict_path= model_path + 'patches.json', 
-                        classifier_model=linear_svm_model,
-                        fct_feature_extraction=extract_hog_feature, 
-                        param_training=param_training, 
-                        results_path=results_path, model_path=model_path)
+my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json',
+                    patches_dict_path= model_path + 'patches.json', patches_pos_dict_path = None, 
+                    classifier_model=linear_svm_model,
+                    fct_feature_extraction=extract_hog_feature, 
+                    param_training=param_training, 
+                    results_path=results_path, model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
-coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, None)
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, None)
 
-# my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
+my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
 my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train, results_path + 'best_trial.pkl')
-my_trainer.run_prediction(coord_prepared_test, label_prepared_test)
+# my_trainer.run_prediction(coord_prepared_test, label_prepared_test)
