@@ -680,8 +680,16 @@ class Trainer():
 
         nb_subj_test = int(len(coord_prepared_train) * ratio_test) # Nb subjects used for hyperopt testing
         nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
-        test_minibatch_size = sum(nb_patch_all_train_subj[:nb_subj_test]) # Define minibatch size used for hyperopt testing
-        train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
+        
+        if 'minibatch_size_test' in self.param_training:
+            minibatch_size_test = self.param_training['minibatch_size_test']
+        else:
+            test_minibatch_size = sum(nb_patch_all_train_subj[:nb_subj_test]) # Define minibatch size used for hyperopt testing
+        
+        if 'minibatch_size_train' in self.param_training:
+            minibatch_size_train = self.param_training['minibatch_size_train']
+        else:
+            train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
 
         # Split coord_prepared_train and label_prepared_train for hyperopt training and testing
         cmpt = 0
