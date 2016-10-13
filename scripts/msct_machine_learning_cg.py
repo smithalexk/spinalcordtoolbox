@@ -387,6 +387,7 @@ class Model(object):
 
 class Classifier_svm(BaseEstimator):
     def __init__(self, params={'kernel': 'rbf', 'C': 1.0}):
+
         self.clf = svm.SVC()
         self.scaler = StandardScaler()
         self.params = params
@@ -419,6 +420,7 @@ class Classifier_svm(BaseEstimator):
 
     def set_params(self, params):
         self.clf.set_params(**params)
+        self.params = params
 
 
 class Classifier_linear_svm(BaseEstimator):
@@ -440,6 +442,7 @@ class Classifier_linear_svm(BaseEstimator):
 
     def save(self, fname_out):
         joblib.dump(self.clf, fname_out + '.pkl')
+        print self.clf.get_params()
 
     def load(self, fname_in):
         clf = joblib.load(fname_in + '.pkl')
@@ -449,7 +452,7 @@ class Classifier_linear_svm(BaseEstimator):
         self.params = clf.get_params()
         self.C = self.params['C']
         self.loss = self.params['loss']
-        self.class_weight = self.params['class_weight']  
+        self.class_weight = self.params['class_weight']
 
     def set_params(self, params):
         self.clf.set_params(**params)
@@ -494,7 +497,10 @@ class Trainer():
         self.model_name = classifier_model['model_name']
         self.model = classifier_model['model']
 
-        self.model_hyperparam = classifier_model['model_hyperparam']
+        if 'model_hyperparam' in classifier_model:
+            self.model_hyperparam = classifier_model['model_hyperparam']
+        else:
+            self.model_hyperparam = None
 
         self.fct_feature_extraction = fct_feature_extraction
 
@@ -503,9 +509,6 @@ class Trainer():
 
         self.results_path = sct.slash_at_the_end(results_path, slash=1)
         self.model_path = sct.slash_at_the_end(model_path, slash=1)
-        self.train_model_path = self.model_path + self.model_name + '_init'
-
-        self.model.save(self.train_model_path)
 
     def prepare_patches(self, fname_raw_images, fname_patch, ratio_patch_per_image=1.0):
         ###############################################################################################################
@@ -675,126 +678,166 @@ class Trainer():
     # 
     ###############################################################################################################
 
-        nb_subj_test = int(len(coord_prepared_train) * ratio_test) # Nb subjects used for hyperopt testing
-        nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
-        
-        if 'minibatch_size_test' in self.param_training:
-            minibatch_size_test = self.param_training['minibatch_size_test']
-        else:
-            test_minibatch_size = sum(nb_patch_all_train_subj[:nb_subj_test]) # Define minibatch size used for hyperopt testing
-        
-        if 'minibatch_size_train' in self.param_training:
-            minibatch_size_train = self.param_training['minibatch_size_train']
-        else:
-            train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
-
-        # Split coord_prepared_train and label_prepared_train for hyperopt training and testing
-        cmpt = 0
-        coord_prepared_train_hyperopt, coord_prepared_test_hyperopt = {}, {}
-        label_prepared_train_hyperopt, label_prepared_test_hyperopt = {}, {}
-        for i in coord_prepared_train:
-            if cmpt < nb_subj_test:
-                coord_prepared_test_hyperopt[str(i)] = coord_prepared_train[str(i)]
-                label_prepared_test_hyperopt[str(i)] = label_prepared_train[str(i)]
+        if self.model_hyperparam is not None:
+            nb_subj_test = int(len(coord_prepared_train) * ratio_test) # Nb subjects used for hyperopt testing
+            nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
+            
+            if 'minibatch_size_test' in self.param_training:
+                minibatch_size_test = self.param_training['minibatch_size_test']
             else:
-                coord_prepared_train_hyperopt[str(i)] = coord_prepared_train[str(i)]
-                label_prepared_train_hyperopt[str(i)] = label_prepared_train[str(i)]
-            cmpt += 1
-
-        # Create minibatch iterators for hyperopt training and testing
-        minibatch_iterator_test = self.iter_minibatches_trainer(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, 
-                                                            test_minibatch_size, self.training_dataset)
-        minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
-                                                            train_minibatch_size, self.training_dataset)
-
-        test_samples = minibatch_iterator_test.next()
-        X_test = np.array(test_samples['patches_feature'])
-        y_true = np.array(test_samples['patches_label'])
-
-        # Create hyperopt dict compatible with hyperopt Lib
-        model_hyperparam_hyperopt = {}                             
-        for param in self.model_hyperparam:
-            param_cur = self.model_hyperparam[param]
-            if type(param_cur) is list and len(param_cur) == 2:
-                print param_cur
-                model_hyperparam_hyperopt[param] = hp.uniform(param, param_cur[0], param_cur[1])
+                test_minibatch_size = sum(nb_patch_all_train_subj[:nb_subj_test]) # Define minibatch size used for hyperopt testing
+            
+            if 'minibatch_size_train' in self.param_training:
+                minibatch_size_train = self.param_training['minibatch_size_train']
             else:
-                model_hyperparam_hyperopt[param] = hp.choice(param, param_cur)
+                train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
+
+            # Split coord_prepared_train and label_prepared_train for hyperopt training and testing
+            cmpt = 0
+            coord_prepared_train_hyperopt, coord_prepared_test_hyperopt = {}, {}
+            label_prepared_train_hyperopt, label_prepared_test_hyperopt = {}, {}
+            for i in coord_prepared_train:
+                if cmpt < nb_subj_test:
+                    coord_prepared_test_hyperopt[str(i)] = coord_prepared_train[str(i)]
+                    label_prepared_test_hyperopt[str(i)] = label_prepared_train[str(i)]
+                else:
+                    coord_prepared_train_hyperopt[str(i)] = coord_prepared_train[str(i)]
+                    label_prepared_train_hyperopt[str(i)] = label_prepared_train[str(i)]
+                cmpt += 1
+
+            # Create minibatch iterators for hyperopt training and testing
+            minibatch_iterator_test = self.iter_minibatches_trainer(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, 
+                                                                test_minibatch_size, self.training_dataset)
+            minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
+                                                                train_minibatch_size, self.training_dataset)
+
+            test_samples = minibatch_iterator_test.next()
+            X_test = np.array(test_samples['patches_feature'])
+            y_true = np.array(test_samples['patches_label'])
+
+            # Create hyperopt dict compatible with hyperopt Lib
+            model_hyperparam_hyperopt = {}                             
+            for param in self.model_hyperparam:
+                param_cur = self.model_hyperparam[param]
+                if type(param_cur) is list and len(param_cur) == 2:
+                    model_hyperparam_hyperopt[param] = hp.uniform(param, param_cur[0], param_cur[1])
+                else:
+                    model_hyperparam_hyperopt[param] = hp.choice(param, param_cur)
+
+            def hyperopt_train_test(params):
+
+                    ### Benjamin: ajouter ici self.param_hyperopt['nb_epoch']
+                    self.model.set_params(params)
+
+                    tick = time.time()
+                    self.model.train(X_train, y_train)
+                    toc = time.time()-tick
+
+                    ### Benjamin: ajouter ici self.param_hyperopt['eval_factor']
+                    y_pred = self.model.predict(X_test)
+                    score = self.param_hyperopt['fct'](y_true, y_pred)
+
+                    return {'loss': -score, 'status': STATUS_OK, 'eval_time': toc}
 
 
-        def hyperopt_train_test(params):
+            for data in minibatch_iterator_train:
+                X_train = np.array(data['patches_feature'])
+                y_train = np.array(data['patches_label'])
 
-                ### Benjamin: ajouter ici self.param_hyperopt['nb_epoch']
-                self.model.set_params(params)
+                trials = Trials()
+                best = fmin(hyperopt_train_test, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
 
-                tick = time.time()
-                self.model.train(X_train, y_train)
-                toc = time.time()-tick
-
-                ### Benjamin: ajouter ici self.param_hyperopt['eval_factor']
-                y_pred = self.model.predict(X_test)
-                score = self.param_hyperopt['fct'](y_true, y_pred)
-
-                return {'loss': -score, 'status': STATUS_OK, 'eval_time': toc}
-
-
-        for data in minibatch_iterator_train:
-            X_train = np.array(data['patches_feature'])
-            y_train = np.array(data['patches_label'])
-
-            trials = Trials()
-            best = fmin(hyperopt_train_test, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
-
-            pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(cmpt).zfill(3) + '.pkl', "wb"))
+                pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(cmpt).zfill(3) + '.pkl', "wb"))
+        
+        else:
+            print ' '
+            print 'Please provide a hyper parameter dict (called \'model_hyperparam\') in your classifier_model dict'
+            print ' '
 
 
-
-    def set_hyperopt(self):
+    def set_hyperopt_train(self, coord_train, label_train, path_best_trial=''):
     ###############################################################################################################
     #
-    # - Open all trials_*.pkl generated by hyperparam_optimization
-    # - Find better score: save related trials_*.pkl file as trials_best.pkl
-    # - Set optimized params to self.model and save it as self.model_name + '_opt' 
+    # IF path_best_trial='':
+    #       - Open all trials_*.pkl generated by hyperparam_optimization
+    #       - Find better score: save related trials_*.pkl file as trials_best.pkl
+    # ELSE:
+    #       - load path_best_trial
+    # 
+    # Set optimized params to self.model and save it as self.model_name + '_opt'
+    #
+    # Train the model 
     # 
     ###############################################################################################################
 
-        fname_trials = [f for f in listdir(self.results_path) if isfile(join(self.results_path, f)) and f.startswith('trials_')]
+        if path_best_trial == '':
+            fname_trials = [f for f in listdir(self.results_path) if isfile(join(self.results_path, f)) and f.startswith('trials_')]
 
-        trials_score_list = []
-        trials_eval_time_list = []
-        for f in fname_trials:
-            with open(results_path + f) as outfile:    
-                trial = pickle.load(outfile)
+            trials_score_list = []
+            trials_eval_time_list = []
+            for f in fname_trials:
+                with open(results_path + f) as outfile:    
+                    trial = pickle.load(outfile)
+                    outfile.close()
+                loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
+                eval_time_list = [trial[i]['result']['eval_time'] for i in range(len(trial))]
+                trials_score_list.append(min(loss_list))
+                trials_eval_time_list.append(sum(eval_time_list))
+
+            print ' '
+            print 'Hyperopt Training time: ' + str(round(sum(trials_eval_time_list),3)) + 's'    
+            print ' '
+
+            idx_best_trial = trials_score_list.index(min(trials_score_list))
+            with open(results_path + fname_trials[idx_best_trial]) as outfile:    
+                best_trial = pickle.load(outfile)
+                pickle.dump(best_trial, open(self.results_path + 'best_trial.pkl', "wb"))
                 outfile.close()
-            loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
-            eval_time_list = [trial[i]['result']['eval_time'] for i in range(len(trial))]
-            trials_score_list.append(min(loss_list))
-            trials_eval_time_list.append(sum(eval_time_list))
-
-        print ' '
-        print 'Training time: ' + str(round(sum(trials_eval_time_list),3)) + 's'    
-        print ' '
-
-        idx_best_trial = trials_score_list.index(min(trials_score_list))
-        with open(results_path + fname_trials[idx_best_trial]) as outfile:    
-            best_trial = pickle.load(outfile)
-            pickle.dump(best_trial, open(self.results_path + 'best_trial.pkl', "wb"))
-            outfile.close()
+        else:
+            with open(path_best_trial) as outfile:    
+                best_trial = pickle.load(outfile)
+                outfile.close()
 
         loss_list = [best_trial[i]['result']['loss'] for i in range(len(best_trial))]
         idx_best_params = loss_list.index(min(loss_list))
         best_params = best_trial[idx_best_params]['misc']['vals']
 
-        model_hyperparam_opt = {}
-        for k in self.model_hyperparam.keys():
-            if isinstance(best_params[k][0], int):
-                model_hyperparam_opt[k] = self.model_hyperparam[k][best_params[k][0]]
-            else:
-                model_hyperparam_opt[k] = float(best_params[k][0])
+        if self.model_hyperparam is not None:
 
-        self.model.set_params(model_hyperparam_opt)
-        self.train_model_path = self.model_path + self.model_name + '_opt'
-        self.model.save(self.train_model_path)
+            model_hyperparam_opt = {}
+            for k in self.model_hyperparam.keys():
+                if isinstance(best_params[k][0], int):
+                    model_hyperparam_opt[k] = self.model_hyperparam[k][best_params[k][0]]
+                else:
+                    model_hyperparam_opt[k] = float(best_params[k][0])
+
+            self.model.set_params(model_hyperparam_opt)
+            
+            if 'minibatch_size_train' in self.param_training:
+                minibatch_size_train = self.param_training['minibatch_size_train']
+            else:
+                minibatch_size_train = sum([len(coord_train[str(i)]) for i in coord_train])
+
+            minibatch_iterator_train = self.iter_minibatches_trainer(coord_train, label_train, 
+                                                                minibatch_size_train, self.training_dataset)
+            tick = time.time()
+            for data_train in minibatch_iterator_train:
+                X_train = data_train['patches_feature']
+                y_train = data_train['patches_label']
+                
+                self.model.train(X_train, y_train)
+
+            print ' '
+            print 'Training time: ' + str(round(time.time()-tick,3)) + 's'    
+            print ' '
+
+            self.train_model_path = self.model_path + self.model_name + '_opt'
+            self.model.save(self.train_model_path)
+
+        else:
+            print ' '
+            print 'Please provide a hyper parameter dict (called \'model_hyperparam\') in your classifier_model dict'
+            print ' '
 
     def run_prediction(self, coord_train, label_train, coord_test, label_test):
     ###############################################################################################################
@@ -992,7 +1035,7 @@ methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'ra
 
 param_training = {'number_of_epochs': 1, 'patch_size': [32, 32],
                     # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
-                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':100, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
+                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
 
 ### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
 my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json', patches_dict_path= model_path + 'patches.json', 
@@ -1002,8 +1045,8 @@ my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json', patches_
                         results_path=results_path, model_path=model_path)
 
 coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
-coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
-# my_trainer.set_hyperopt()
+my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
 # my_trainer.run_prediction(coord_prepared_train, label_prepared_train, coord_prepared_test, label_prepared_test)
