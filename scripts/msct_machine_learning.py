@@ -250,9 +250,6 @@ class FileManager(object):
         return self.training_dataset, self.testing_dataset
 
     def compute_patches_coordinates(self, image):
-        if self.extract_all_negative or self.extract_all_positive:
-            print 'Extract all negative/positive patches: feature not yet ready...'
-
         image_dim = image.dim
 
         x, y, z = np.mgrid[0:image_dim[0], 0:image_dim[1], 0:image_dim[2]]
@@ -308,6 +305,29 @@ class FileManager(object):
             raise e
 
     def explore(self):
+        if self.extract_all_positive:
+            results_positive = {}
+            classes_positive = {}
+
+            global_results_patches = {'patch_info': self.patch_info}
+
+            for i in range(len(self.training_dataset)):
+                fname_gold_image = self.training_dataset[i][1][0]  # first gold image is the reference
+                print fname_gold_image
+                im_gold = Image(self.dataset_path + fname_gold_image)
+                coordinates_positive = np.where(im_gold.data == 1)
+                coordinates_positive = np.asarray([[coordinates_positive[0][j], coordinates_positive[1][j], coordinates_positive[2][j]] for j in range(len(coordinates_positive[0]))])
+                coordinates_positive = np.asarray(im_gold.transfo_pix2phys(coordinates_positive))
+                label_positive = np.ones(coordinates_positive.shape[0])
+
+                results_positive[str(i)] = [[coordinates_positive[j, :].tolist(), label_positive[j]] for j in range(len(label_positive))]
+
+            global_results_patches['training'] = results_positive
+
+        with bz2.BZ2File(path_output + 'patches_positive.pbz2', 'w') as f:
+            pickle.dump(global_results_patches, f)
+
+
         # training dataset
         global_results_patches = {'patch_info': self.patch_info}
 
@@ -351,7 +371,6 @@ class FileManager(object):
                 max_class = cl
         for cl in classes_training:
             classes_training[cl][1] = classes_training[cl][0] / float(classes_training[max_class][0])
-
 
         # TESTING DATASET
         results_testing = {}
@@ -398,6 +417,8 @@ class FileManager(object):
 
         with bz2.BZ2File(path_output + 'patches.pbz2', 'w') as f:
             pickle.dump(global_results_patches, f)
+
+
 
 
 #########################################
@@ -503,6 +524,7 @@ my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_au
                                                            'extract_all_negative': False,
                                                            'batch_size': 500},
                               fct_groundtruth_patch=None)
+my_file_manager.extract_all_positive = True
 
 path_output = '/Users/benjamindeleener/data/data_augmentation/'
 
