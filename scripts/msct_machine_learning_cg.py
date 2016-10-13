@@ -436,7 +436,6 @@ class Classifier_linear_svm(BaseEstimator):
  
     def predict(self, X):
         X = self.scaler.transform(X)
-        
         return self.clf.predict(X)
 
     def save(self, fname_out):
@@ -716,35 +715,39 @@ class Trainer():
         model_hyperparam_hyperopt = {}                             
         for param in self.model_hyperparam:
             param_cur = self.model_hyperparam[param]
-            if all([isinstance(item, int) for item in param_cur]) and len(param_cur) == 2:
+            if type(param_cur) is list and len(param_cur) == 2:
+                print param_cur
                 model_hyperparam_hyperopt[param] = hp.uniform(param, param_cur[0], param_cur[1])
             else:
                 model_hyperparam_hyperopt[param] = hp.choice(param, param_cur)
 
-        def f_svm(params):
 
+        def hyperopt_train_test(params):
+
+                ### Benjamin: ajouter ici self.param_hyperopt['nb_epoch']
                 self.model.set_params(params)
+
                 tick = time.time()
                 self.model.train(X_train, y_train)
                 toc = time.time()-tick
-                y_pred = self.model.predict(X_test)
 
+                ### Benjamin: ajouter ici self.param_hyperopt['eval_factor']
+                y_pred = self.model.predict(X_test)
                 score = self.param_hyperopt['fct'](y_true, y_pred)
+
                 return {'loss': -score, 'status': STATUS_OK, 'eval_time': toc}
 
-        for n_epoch in range(self.param_hyperopt['nb_epoch']):
-            cmpt = 0
-            for data in minibatch_iterator_train:
-                X_train = np.array(data['patches_feature'])
-                y_train = np.array(data['patches_label'])
 
-                trials = Trials()
-                best = fmin(f_svm, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
+        for data in minibatch_iterator_train:
+            X_train = np.array(data['patches_feature'])
+            y_train = np.array(data['patches_label'])
 
-                if not cmpt % self.param_hyperopt['eval_factor']:
-                    pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(n_epoch).zfill(3) + '_' + str(cmpt).zfill(3) + '.pkl', "wb"))
+            trials = Trials()
+            best = fmin(hyperopt_train_test, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
 
-                cmpt += 1
+            pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(cmpt).zfill(3) + '.pkl', "wb"))
+
+
 
     def set_hyperopt(self):
     ###############################################################################################################
@@ -974,14 +977,14 @@ model_path = '/Users/chgroc/data/spine_detection/model/'
 
 svm_model = {'model_name': 'SVM', 'model': Classifier_svm(svm.SVC),
             'model_hyperparam':{'C': [1, 1000],
-                                'kernel': ['sigmoid', 'poly', 'rbf'],
+                                'kernel': ('sigmoid', 'poly', 'rbf'),
                                 'gamma': [0, 20],
-                                'class_weight': [None, 'balanced']}}
+                                'class_weight': (None, 'balanced')}}
 
 linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(svm.LinearSVC),
                     'model_hyperparam':{'C': [1, 1000],
-                                        'class_weight': [None, 'balanced'],
-                                        'loss': ['hinge', 'squared_hinge']}}
+                                        'class_weight': (None, 'balanced'),
+                                        'loss': ('hinge', 'squared_hinge')}}
 
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 
                             'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
@@ -998,9 +1001,9 @@ my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json', patches_
                         param_training=param_training, 
                         results_path=results_path, model_path=model_path)
 
-# coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, 1.0)
+coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, 1.0)
 
-# my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
-my_trainer.set_hyperopt()
+my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
+# my_trainer.set_hyperopt()
 # my_trainer.run_prediction(coord_prepared_train, label_prepared_train, coord_prepared_test, label_prepared_test)
