@@ -238,15 +238,6 @@ class FileManager(object):
         self.training_dataset = self.list_files[np.ix_(array_indexes[:int(self.ratio_dataset[0] * self.number_of_images)])]
         self.testing_dataset = self.list_files[np.ix_(array_indexes[int(self.ratio_dataset[0] * self.number_of_images):])]
 
-        results = {
-            'training': {'raw_images': [data[0].tolist() for data in self.training_dataset], 'gold_images': [data[1].tolist() for data in self.training_dataset]},
-            'testing': {'raw_images': [data[0].tolist() for data in self.testing_dataset], 'gold_images': [data[1].tolist() for data in self.testing_dataset]},
-            'dataset_path': self.dataset_path
-        }
-
-        with bz2.BZ2File(path_output + 'datasets.pbz2', 'w') as f:
-            pickle.dump(results, f)
-
         return self.training_dataset, self.testing_dataset
 
     def compute_patches_coordinates(self, image):
@@ -290,12 +281,22 @@ class FileManager(object):
             number_done = 0
             for data in minibatch_iterator_test:
                 if np.ndim(data['patches_gold']) == 4:
-                    labels.extend(center_of_patch_equal_one(data))
+                    labels.extend(self.fct_groundtruth_patch(data))
                     number_done += data['patches_gold'].shape[0]
                     pbar.update(number_done)
             pbar.finish()
 
-            return [i, patches_coordinates, labels]
+            # processing results
+            results = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+
+            # write results in file
+            path_fname, file_fname, ext_fname = sct.extract_fname(self.dataset_path + fname_raw_images[0])
+            with bz2.BZ2File(path_output + 'patches_coordinates_' + file_fname + '.pbz2', 'w') as f:
+                pickle.dump(results, f)
+
+            del patches_coordinates
+
+            return [i, labels]
 
         except KeyboardInterrupt:
             return
@@ -307,9 +308,7 @@ class FileManager(object):
     def explore(self):
         if self.extract_all_positive:
             results_positive = {}
-            classes_positive = {}
 
-            global_results_patches = {'patch_info': self.patch_info}
 
             for i in range(len(self.training_dataset)):
                 fname_gold_image = self.training_dataset[i][1][0]  # first gold image is the reference
@@ -322,17 +321,10 @@ class FileManager(object):
 
                 results_positive[str(i)] = [[coordinates_positive[j, :].tolist(), label_positive[j]] for j in range(len(label_positive))]
 
-            global_results_patches['training'] = results_positive
-
-        with bz2.BZ2File(path_output + 'patches_positive.pbz2', 'w') as f:
-            pickle.dump(global_results_patches, f)
-
-
-        # training dataset
-        global_results_patches = {'patch_info': self.patch_info}
+            with bz2.BZ2File(path_output + 'patches_positive.pbz2', 'w') as f:
+                pickle.dump(results_positive, f)
 
         # TRAINING DATASET
-        results_training = {}
         classes_training = {}
 
         pool = mp.Pool(processes=self.cpu_number)
@@ -342,10 +334,7 @@ class FileManager(object):
         try:
             pool.join()  # waiting for all the jobs to be done
             for result in results:
-                i = result[0]
-                patches_coordinates = result[1]
-                labels = result[2]
-                results_training[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+                labels = result[1]
 
                 classes_in_image, counts = np.unique(labels, return_counts=True)
                 for j, cl in enumerate(classes_in_image):
@@ -363,8 +352,6 @@ class FileManager(object):
             print e
             sys.exit(2)
 
-        global_results_patches['training'] = results_training
-
         count_max_class, max_class = 0, ''
         for cl in classes_training:
             if classes_training[cl][0] > count_max_class:
@@ -373,7 +360,6 @@ class FileManager(object):
             classes_training[cl][1] = classes_training[cl][0] / float(classes_training[max_class][0])
 
         # TESTING DATASET
-        results_testing = {}
         classes_testing = {}
 
         pool = mp.Pool(processes=self.cpu_number)
@@ -383,10 +369,7 @@ class FileManager(object):
         try:
             pool.join()  # waiting for all the jobs to be done
             for result in results:
-                i = result[0]
-                patches_coordinates = result[1]
-                labels = result[2]
-                results_testing[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+                labels = result[1]
 
                 classes_in_image, counts = np.unique(labels, return_counts=True)
                 for j, cl in enumerate(classes_in_image):
@@ -404,8 +387,6 @@ class FileManager(object):
             print e
             sys.exit(2)
 
-        global_results_patches['testing'] = results_testing
-
         count_max_class, max_class = 0, ''
         for cl in classes_testing:
             if classes_testing[cl][0] > count_max_class:
@@ -413,12 +394,18 @@ class FileManager(object):
         for cl in classes_testing:
             classes_testing[cl][1] = classes_testing[cl][0] / float(classes_testing[max_class][0])
 
-        global_results_patches['statistics'] = {'classes_training': classes_training, 'classes_testing': classes_testing}
+        results = {
+            'training': {'raw_images': [data[0].tolist() for data in self.training_dataset],
+                         'gold_images': [data[1].tolist() for data in self.training_dataset]},
+            'testing': {'raw_images': [data[0].tolist() for data in self.testing_dataset],
+                        'gold_images': [data[1].tolist() for data in self.testing_dataset]},
+            'dataset_path': self.dataset_path,
+            'statistics': {'classes_training': classes_training, 'classes_testing': classes_testing},
+            'patch_info': self.patch_info
+        }
 
-        with bz2.BZ2File(path_output + 'patches.pbz2', 'w') as f:
-            pickle.dump(global_results_patches, f)
-
-
+        with bz2.BZ2File(path_output + 'datasets.pbz2', 'w') as f:
+            pickle.dump(results, f)
 
 
 #########################################
@@ -448,24 +435,6 @@ def extract_list_file_from_path(path_data):
 def center_of_patch_equal_one(data):
     patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
     return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
-
-
-
-class Model(object):
-    def __init__(self, fname):
-        self.fname = fname
-
-    def load(self):
-        pass
-
-    def save(self, fname_out):
-        pass
-
-    def train(self):
-        pass
-
-    def predict(self):
-        return
 
 
 from keras.models import Sequential
@@ -548,7 +517,7 @@ my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_au
                                                            'extract_all_positive': False,
                                                            'extract_all_negative': False,
                                                            'batch_size': 500},
-                              fct_groundtruth_patch=None)
+                              fct_groundtruth_patch=center_of_patch_equal_one)
 my_file_manager.extract_all_positive = True
 
 path_output = '/Users/benjamindeleener/data/data_augmentation/'
