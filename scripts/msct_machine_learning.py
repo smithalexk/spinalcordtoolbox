@@ -307,9 +307,6 @@ class FileManager(object):
 
     def explore(self):
         if self.extract_all_positive:
-            results_positive = {}
-
-
             for i in range(len(self.training_dataset)):
                 fname_gold_image = self.training_dataset[i][1][0]  # first gold image is the reference
                 im_gold = Image(self.dataset_path + fname_gold_image)
@@ -318,7 +315,7 @@ class FileManager(object):
                 coordinates_positive = np.asarray(im_gold.transfo_pix2phys(coordinates_positive))
                 label_positive = np.ones(coordinates_positive.shape[0])
 
-                results_positive[str(i)] = [[coordinates_positive[j, :].tolist(), label_positive[j]] for j in range(len(label_positive))]
+                results_positive = [[coordinates_positive[j, :].tolist(), label_positive[j]] for j in range(len(label_positive))]
 
                 # write results in file
                 path_fname, file_fname, ext_fname = sct.extract_fname(self.dataset_path + self.training_dataset[i][0][0])
