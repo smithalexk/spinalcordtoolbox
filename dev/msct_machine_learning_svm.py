@@ -22,6 +22,7 @@ from sklearn.metrics import roc_auc_score, precision_score, recall_score, accura
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import StandardScaler
 from sklearn import svm
+from sklearn.externals import joblib
 
 ########## Change path
 import sys
@@ -236,19 +237,20 @@ def extract_patch_feature(im, param=None):
     return im
 
 
-my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/large_nobrain_nopad/',
-                              fct_explore_dataset=extract_list_file_from_path,
-                              patch_extraction_parameters={'ratio_dataset': [0.08, 0.04],
-                                                           'ratio_patches_voxels': 0.001,
-                                                           'patch_size': [32, 32],
-                                                           'patch_pixdim': {'axial': [1.0, 1.0]},
-                                                           'extract_all_positive': False,
-                                                           'extract_all_negative': False,
-                                                           'batch_size': 200},
-                              fct_groundtruth_patch=None)
+# my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/large_nobrain_nopad/',
+#                               fct_explore_dataset=extract_list_file_from_path,
+#                               patch_extraction_parameters={'ratio_dataset': [0.08, 0.04],
+#                                                            'ratio_patches_voxels': 0.001,
+#                                                            'patch_size': [32, 32],
+#                                                            'patch_pixdim': {'axial': [1.0, 1.0]},
+#                                                            'extract_all_positive': False,
+#                                                            'extract_all_negative': False,
+#                                                            'batch_size': 200},
+#                               fct_groundtruth_patch=None)
 
 results_path = '/Users/chgroc/data/spine_detection/results/'
 model_path = '/Users/chgroc/data/spine_detection/model/'
+data_path = '/Users/chgroc/data/spine_detection/data/'
 
 # training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
 # my_file_manager.explore()
@@ -268,21 +270,23 @@ methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cut
                             'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0,255]}}
 
-param_training = {'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
+param_training = {'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 0.05,
                     # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
                     'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
 
-### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
-my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json',
-                    patches_dict_path= model_path + 'patches.json', patches_pos_dict_path = None, 
+my_trainer = Trainer(data_filemanager_path = data_path,
+                    datasets_dict_fname = 'datasets.pbz2',
+                    patches_dict_prefixe = 'patches_coordinates_', 
+                    patches_pos_dict_prefixe = 'patches_coordinates_positives_', 
                     classifier_model=linear_svm_model,
                     fct_feature_extraction=extract_hog_feature, 
                     param_training=param_training, 
                     results_path=results_path, model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, None)
-# # coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, None)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images)
+coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images)
 
-my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
-my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train, results_path + 'best_trial.pkl')
-# # my_trainer.run_prediction(coord_prepared_test, label_prepared_test)
+my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, ratio_test=0.4)
+my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
+# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train, results_path + 'best_trial.pkl')
+my_trainer.run_prediction(coord_prepared_test, label_prepared_test)

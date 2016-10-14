@@ -425,42 +425,36 @@ class FileManager():
 
 
 class Trainer():
-    def __init__(self, datasets_dict_path, patches_dict_path, patches_pos_dict_path, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
+    def __init__(self, data_filemanager_path, datasets_dict_fname, patches_dict_prefixe, patches_pos_dict_prefixe, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
 
-        with open(datasets_dict_path) as outfile:    
-            datasets_dict = json.load(outfile)
+        with bz2.BZ2File(data_filemanager_path + datasets_dict_fname, 'rb') as f:
+            datasets_dict = pickle.load(f)
+            f.close()
 
-        with open(patches_dict_path) as outfile:    
-            patches_dict = json.load(outfile)
-        # import cPickle as pickle
-        # import bz2
-
-        # with bz2.BZ2File(datasets_dict_path, 'rb') as f:
-        #     datasets_dict = pickle.load(f)
-
-        # with bz2.BZ2File(patches_dict_path, 'rb') as f:
-        #     patches_dict = pickle.load(f)
+        self.data_filemanager_path = sct.slash_at_the_end(data_filemanager_path, slash=1)
+        self.datasets_dict_fname = datasets_dict_fname
 
         self.dataset_path = sct.slash_at_the_end(str(datasets_dict['dataset_path']), slash=1)
-        # print ' '
-        # print 'Attention path modifie'
-        # self.dataset_path = sct.slash_at_the_end('/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/vsmall/vsmall_nobrain_nopad/', slash=1)
-        # print ' '
+        print self.dataset_path
+        print ' '
+        print 'Attention path modifie'
+        self.dataset_path = sct.slash_at_the_end('/Users/chgroc/data/spine_detection/data/test_very_small/', slash=1)
+        print self.dataset_path
+        print ' '
 
-        self.dataset_stats = patches_dict['statistics']
-        self.patch_info = patches_dict['patch_info']
+        self.dataset_stats = datasets_dict['statistics']
+        self.patch_info = datasets_dict['patch_info']
 
         self.training_dataset = datasets_dict['training']
         self.fname_training_raw_images = datasets_dict['training']['raw_images']
         self.fname_training_gold_images = datasets_dict['training']['gold_images']
-        self.coord_label_training_patches = patches_dict['training']
-        if patches_pos_dict_path is not None:
-            self.coord_label_training_patches_pos = patches_pos_dict_path['training']
+        self.patches_dict_prefixe = patches_dict_prefixe
+        if patches_pos_dict_prefixe is not None:
+            self.patches_pos_dict_prefixe = patches_pos_dict_prefixe
 
         self.testing_dataset = datasets_dict['testing']
         self.fname_testing_raw_images = datasets_dict['testing']['raw_images']
         self.fname_testing_gold_images = datasets_dict['testing']['gold_images']
-        self.coord_label_testing_patches = patches_dict['testing']
 
         self.model_name = classifier_model['model_name']
         self.model = classifier_model['model']
@@ -491,7 +485,7 @@ class Trainer():
                         't0': time.time(),
                         'runtime_history': [(0, 0)], 'total_fit_time': 0.0, 'total_hyperopt_time': 0.0}
 
-    def prepare_patches(self, fname_raw_images, coord_label_patches, coord_label_patches_pos = None):
+    def prepare_patches(self, fname_raw_images):
         ###############################################################################################################
         #
         # Output:       Coordinates Dict{'index in datasets.pbz2': [coord[float, float, float], ...], ...}
@@ -502,8 +496,24 @@ class Trainer():
         # Dict initialization
         coord_prepared, label_prepared = {}, {}
 
+        coord_label_patches_file, coord_label_patches_pos_file = [], []
+        
         # Iteration for all INPUT fname subjects
         for i, fname in enumerate(fname_raw_images):
+
+            # By default the first: fname[0]
+            fname_patch = self.patches_dict_prefixe + fname[0].split('.',1)[0] + '.' + self.datasets_dict_fname.split('.',1)[1]
+            with bz2.BZ2File(self.data_filemanager_path + fname_patch, 'rb') as f:
+                coord_label_patches = pickle.load(f)
+                f.close()
+
+            fname_patch_pos = self.patches_pos_dict_prefixe + fname[0].split('.',1)[0] + '.' + self.datasets_dict_fname.split('.',1)[1]
+            if os.path.exists(self.data_filemanager_path + fname_patch_pos):
+                with bz2.BZ2File(self.data_filemanager_path + fname_patch_pos, 'rb') as f:
+                    coord_label_patches_pos = pickle.load(f)
+                    f.close()
+            else:
+                coord_label_patches_pos = None
 
             # List of coord and List of label initialization
             coord_prepared_tmp, label_prepared_tmp = [], []
@@ -511,26 +521,25 @@ class Trainer():
             # If a label class balance is expected
             # Only for training dataset
             if coord_label_patches_pos is not None:
-                nb_patches_pos_tot = len(coord_label_patches_pos[str(i)])
+                nb_patches_pos_tot = len(coord_label_patches_pos)
                 # For CNN, nb_patches_pos_to_extract = nb_patches_pos_tot
                 # Same ratio to extract from (random) patches and from pos patches
                 nb_patches_pos_to_extract = int(self.ratio_patch_per_img * nb_patches_pos_tot)
 
                 # Iteration for all nb_patches_pos_to_extract pos patches
                 for i_patch_pos in range(nb_patches_pos_to_extract):
-                    coord_prepared_tmp.append(coord_label_patches_pos[str(i)][i_patch_pos][0])
-                    label_prepared_tmp.append(coord_label_patches_pos[str(i)][i_patch_pos][1])
-
+                    coord_prepared_tmp.append(coord_label_patches_pos[i_patch_pos][0])
+                    label_prepared_tmp.append(coord_label_patches_pos[i_patch_pos][1])
             else:
                 print 'If a label class balance is expected: Please provide Coordinates of positive patches'
 
-            nb_patches_tot = len(coord_label_patches[str(i)])
+            nb_patches_tot = len(coord_label_patches)
             nb_patches_to_extract = int(self.ratio_patch_per_img * nb_patches_tot)
 
             # Iteration for all nb_patches_to_extract patches
             for i_patch in range(nb_patches_to_extract):
-                coord_prepared_tmp.append(coord_label_patches[str(i)][i_patch][0])
-                label_prepared_tmp.append(coord_label_patches[str(i)][i_patch][1])
+                coord_prepared_tmp.append(coord_label_patches[i_patch][0])
+                label_prepared_tmp.append(coord_label_patches[i_patch][1])
 
             # Shuffle to prevent the case where all pos patches are gather in one minibatch
             index_shuf = range(len(coord_prepared_tmp))
@@ -750,7 +759,7 @@ class Trainer():
 
                     return {'loss': -score, 'status': STATUS_OK, 'eval_time': toc}
 
-
+            cmpt = 0
             for data in minibatch_iterator_train:
                 X_train = np.array(data['patches_feature'])
                 y_train = np.array(data['patches_label'])
@@ -762,6 +771,7 @@ class Trainer():
 
                 # Save results
                 pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(cmpt).zfill(3) + '.pkl', "wb"))
+                cmpt += 1
         
         else:
             print ' '
@@ -790,7 +800,7 @@ class Trainer():
             trials_score_list = []
             trials_eval_time_list = []
             for f in fname_trials:
-                with open(results_path + f) as outfile:    
+                with open(self.results_path + f) as outfile:    
                     trial = pickle.load(outfile)
                     outfile.close()
                 loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
@@ -801,7 +811,7 @@ class Trainer():
             self.stats['total_hyperopt_time'] = sum(trials_eval_time_list)
 
             idx_best_trial = trials_score_list.index(min(trials_score_list))
-            with open(results_path + fname_trials[idx_best_trial]) as outfile:    
+            with open(self.results_path + fname_trials[idx_best_trial]) as outfile:    
                 best_trial = pickle.load(outfile)
                 pickle.dump(best_trial, open(self.results_path + 'best_trial.pkl', "wb"))
                 outfile.close()
