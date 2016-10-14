@@ -223,10 +223,8 @@ params_cnn = {'patch_size': [32, 32],
              }
 
 cnn_model = {'model_name': 'CNN', 'model': KerasConvNet(params_cnn),
-             'model_hyperparam': {'C': [1, 1000],
-                                  'kernel': ('sigmoid', 'poly', 'rbf'),
-                                  'gamma': [0, 20],
-                                  'class_weight': (None, 'balanced')}}
+             'model_hyperparam': {'batch_size': (128),
+                                  'class_weight': ('balanced')}}
 
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0, 255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0, 255]}}
