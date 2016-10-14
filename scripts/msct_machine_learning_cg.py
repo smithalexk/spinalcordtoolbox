@@ -20,7 +20,6 @@ import json
 import pickle
 from progressbar import Bar, ETA, Percentage, ProgressBar, Timer
 from skimage.feature import hog
-from sklearn.metrics import accuracy_score, precision_score, recall_score
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials, space_eval
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score
@@ -32,6 +31,54 @@ from os import listdir
 from os.path import isfile, join
 import time
 import random 
+
+
+import bz2
+import cPickle as pickle
+import multiprocessing as mp
+import copy_reg
+import types
+
+
+def _pickle_method(method):
+    """
+    Author: Steven Bethard (author of argparse)
+    http://bytes.com/topic/python/answers/552476-why-cant-you-pickle-instancemethods
+    """
+    func_name = method.im_func.__name__
+    obj = method.im_self
+    cls = method.im_class
+    cls_name = ''
+    if func_name.startswith('__') and not func_name.endswith('__'):
+        cls_name = cls.__name__.lstrip('_')
+    if cls_name:
+        func_name = '_' + cls_name + func_name
+    return _unpickle_method, (func_name, obj, cls)
+
+
+def _unpickle_method(func_name, obj, cls):
+    """
+    Author: Steven Bethard
+    http://bytes.com/topic/python/answers/552476-why-cant-you-pickle-instancemethods
+    """
+    for cls in cls.mro():
+        try:
+            func = cls.__dict__[func_name]
+        except KeyError:
+            pass
+        else:
+            break
+    return func.__get__(obj, cls)
+
+copy_reg.pickle(types.MethodType, _pickle_method, _unpickle_method)
+
+
+
+def center_of_patch_equal_one(data):
+    patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
+    return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
+
+
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
     # input: list_gold_images
@@ -377,97 +424,6 @@ class FileManager():
             json.dump(global_results_patches, outfile)
 
 
-class Model(object):
-    def __init__(self, params):
-        self.params = params
-
-    def load(self, fname_in):
-        pass
-
-    def save(self, fname_out):
-        pass
-
-    def train(self, X, y):
-        pass
-
-    def predict(self, X):
-        return
-
-    def set_params(self, params):
-        pass
-
-class Classifier_svm(BaseEstimator):
-    def __init__(self, params={'kernel': 'rbf', 'C': 1.0}):
-
-        self.clf = svm.SVC()
-        self.scaler = StandardScaler()
-        self.params = params
- 
-    def train(self, X, y):
-        self.scaler.fit(X)
-        X = self.scaler.transform(X)
-
-        self.clf.fit(X, y)
- 
-    def predict(self, X):
-        X = self.scaler.transform(X)
-
-        return self.clf.predict(X)
-
-    def save(self, fname_out):
-        joblib.dump(self.clf, fname_out + '.pkl')
-
-    def load(self, fname_in):
-        clf = joblib.load(fname_in + '.pkl')
-
-        self.clf = clf
-
-        params = clf.get_params()
-        self.C = params['C']
-        self.kernel = params['kernel']
-        self.degree = params['degree']
-        self.gamma = params['gamma']
-        self.class_weight = params['class_weight']
-
-    def set_params(self, params):
-        self.clf.set_params(**params)
-        self.params = params
-
-
-class Classifier_linear_svm(BaseEstimator):
-    def __init__(self, params={'C': 1.0, 'loss': 'hinge', 'class_weight': 'None'}):
-
-        self.clf = svm.LinearSVC()
-        self.scaler = StandardScaler()
-        self.params = params
- 
-    def train(self, X, y):
-        self.scaler.fit(X)
-        X = self.scaler.transform(X)
-
-        self.clf.fit(X, y)
- 
-    def predict(self, X):
-        X = self.scaler.transform(X)
-        return self.clf.predict(X)
-
-    def save(self, fname_out):
-        joblib.dump(self.clf, fname_out + '.pkl')
-
-    def load(self, fname_in):
-        clf = joblib.load(fname_in + '.pkl')
-
-        self.clf = clf
-
-        self.params = clf.get_params()
-        self.C = self.params['C']
-        self.loss = self.params['loss']
-        self.class_weight = self.params['class_weight']
-
-    def set_params(self, params):
-        self.clf.set_params(**params)
-        self.params = params
-
 class Trainer():
     def __init__(self, datasets_dict_path, patches_dict_path, patches_pos_dict_path, classifier_model, fct_feature_extraction, param_training, results_path, model_path):
 
@@ -543,16 +499,24 @@ class Trainer():
         #
         ###############################################################################################################
 
+        # Dict initialization
         coord_prepared, label_prepared = {}, {}
 
+        # Iteration for all INPUT fname subjects
         for i, fname in enumerate(fname_raw_images):
 
+            # List of coord and List of label initialization
             coord_prepared_tmp, label_prepared_tmp = [], []
 
+            # If a label class balance is expected
+            # Only for training dataset
             if coord_label_patches_pos is not None:
                 nb_patches_pos_tot = len(coord_label_patches_pos[str(i)])
+                # For CNN, nb_patches_pos_to_extract = nb_patches_pos_tot
+                # Same ratio to extract from (random) patches and from pos patches
                 nb_patches_pos_to_extract = int(self.ratio_patch_per_img * nb_patches_pos_tot)
 
+                # Iteration for all nb_patches_pos_to_extract pos patches
                 for i_patch_pos in range(nb_patches_pos_to_extract):
                     coord_prepared_tmp.append(coord_label_patches_pos[str(i)][i_patch_pos][0])
                     label_prepared_tmp.append(coord_label_patches_pos[str(i)][i_patch_pos][1])
@@ -563,10 +527,12 @@ class Trainer():
             nb_patches_tot = len(coord_label_patches[str(i)])
             nb_patches_to_extract = int(self.ratio_patch_per_img * nb_patches_tot)
 
+            # Iteration for all nb_patches_to_extract patches
             for i_patch in range(nb_patches_to_extract):
                 coord_prepared_tmp.append(coord_label_patches[str(i)][i_patch][0])
                 label_prepared_tmp.append(coord_label_patches[str(i)][i_patch][1])
 
+            # Shuffle to prevent the case where all pos patches are gather in one minibatch
             index_shuf = range(len(coord_prepared_tmp))
             np.random.shuffle(index_shuf)
 
@@ -715,11 +681,12 @@ class Trainer():
     def hyperparam_optimization(self, coord_prepared_train, label_prepared_train, ratio_test):
     ###############################################################################################################
     #
-    # TODO:         f_nn: To be adapted to CNN architecture: https://github.com/fchollet/keras/issues/1591
+    # TODO:         hyperopt_train_test: To be adapted to CNN architecture: https://github.com/fchollet/keras/issues/1591
     #               hp.uniform and hp.choice: To be discussed with Benjamin
     # 
     ###############################################################################################################
 
+        # hyperparam dict must be provided
         if self.model_hyperparam is not None:
             nb_subj_test = int(len(coord_prepared_train) * ratio_test) # Nb subjects used for hyperopt testing
             nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
@@ -753,6 +720,7 @@ class Trainer():
             minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
                                                                 train_minibatch_size, self.training_dataset)
 
+            # Same testing dataset for all hyperopt algo
             test_samples = minibatch_iterator_test.next()
             X_test = np.array(test_samples['patches_feature'])
             y_true = np.array(test_samples['patches_label'])
@@ -766,10 +734,11 @@ class Trainer():
                 else:
                     model_hyperparam_hyperopt[param] = hp.choice(param, param_cur)
 
+            # Objective function
             def hyperopt_train_test(params):
 
                     ### Benjamin: ajouter ici self.param_hyperopt['nb_epoch']
-                    self.model.set_params(params)
+                    self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
 
                     tick = time.time()
                     self.model.train(X_train, y_train)
@@ -777,7 +746,7 @@ class Trainer():
 
                     ### Benjamin: ajouter ici self.param_hyperopt['eval_factor']
                     y_pred = self.model.predict(X_test)
-                    score = self.param_hyperopt['fct'](y_true, y_pred)
+                    score = self.param_hyperopt['fct'](y_true, y_pred) # Score to maximize
 
                     return {'loss': -score, 'status': STATUS_OK, 'eval_time': toc}
 
@@ -786,9 +755,12 @@ class Trainer():
                 X_train = np.array(data['patches_feature'])
                 y_train = np.array(data['patches_label'])
 
+                # Trials object: results report
                 trials = Trials()
+                # Documentation: https://github.com/hyperopt/hyperopt/wiki/FMin
                 best = fmin(hyperopt_train_test, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
 
+                # Save results
                 pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(cmpt).zfill(3) + '.pkl', "wb"))
         
         else:
@@ -889,6 +861,7 @@ class Trainer():
     # 
     ###############################################################################################################
 
+        # 
         if 'minibatch_size_test' in self.param_training:
             minibatch_size_test = self.param_training['minibatch_size_test']
         else:
@@ -939,120 +912,3 @@ class Trainer():
         print progress(self.stats)
 
         pickle.dump(self.stats, open(self.results_path + self.model_name + '_pred.pkl', "wb"))
-
-
-#########################################
-# USE CASE
-#########################################
-def extract_list_file_from_path(path_data):
-    ignore_list = ['.DS_Store']
-    sct.printv('Extracting ' + path_data)
-    cr = '\r'
-
-    list_data = []
-    for root, dirs, files in os.walk(path_data):
-        for fname_im in files:
-            if fname_im in ignore_list:
-                continue
-            if 'seg' in fname_im or 'gmseg' in fname_im:
-                continue
-            f_seg = None
-            for fname_seg in files:
-                if fname_im[:-7] in fname_seg:
-                    f_seg = fname_seg
-            list_data.append([[fname_im], [f_seg]])
-
-    return list_data
-
-
-def extract_hog_feature(im, param=None):
-
-    if param is None:
-        param = {'orientations': 8, 'pixels_per_cell': [6, 6], 'cells_per_block': [3,3],
-                'visualize': False, 'transform_sqrt': True}
-
-    hog_feature = np.array(hog(image = im, orientations=param['orientations'],
-                pixels_per_cell=param['pixels_per_cell'], cells_per_block=param['cells_per_block'],
-                transform_sqrt=param['transform_sqrt'], visualise=param['visualize']))
-
-    return hog_feature
-
-def extract_patch_feature(im, param=None):
-
-    return im
-
-def normalization_percentile(sct_img, param, model=None):
-
-    if param is None:
-        param = {'range': [0,255]}
-
-    sct_img.data = param['range'][0] + param['range'][1] * (sct_img.data - np.percentile(sct_img.data, 0)) / np.abs(np.percentile(sct_img.data, 0) - np.percentile(sct_img.data, 100))
-
-    return sct_img
-
-
-def center_of_patch_equal_one(data):
-    patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
-    return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
-
-
-
-
-
-
-
-
-
-
-
-
-my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/large_nobrain_nopad/',
-                              fct_explore_dataset=extract_list_file_from_path,
-                              patch_extraction_parameters={'ratio_dataset': [0.08, 0.04],
-                                                           'ratio_patches_voxels': 0.001,
-                                                           'patch_size': [32, 32],
-                                                           'patch_pixdim': {'axial': [1.0, 1.0]},
-                                                           'extract_all_positive': False,
-                                                           'extract_all_negative': False,
-                                                           'batch_size': 200},
-                              fct_groundtruth_patch=None)
-
-results_path = '/Users/chgroc/data/spine_detection/results/'
-model_path = '/Users/chgroc/data/spine_detection/model/'
-
-# training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
-# my_file_manager.explore()
-
-svm_model = {'model_name': 'SVM', 'model': Classifier_svm(svm.SVC),
-            'model_hyperparam':{'C': [1, 1000],
-                                'kernel': ('sigmoid', 'poly', 'rbf'),
-                                'gamma': [0, 20],
-                                'class_weight': (None, 'balanced')}}
-
-linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(svm.LinearSVC),
-                    'model_hyperparam':{'C': [1, 1000],
-                                        'class_weight': (None, 'balanced'),
-                                        'loss': ('hinge', 'squared_hinge')}}
-
-methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 
-                            'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
-methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0,255]}}
-
-param_training = {'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
-                    # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
-                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
-
-### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
-my_trainer = Trainer(datasets_dict_path = model_path + 'datasets.json',
-                    patches_dict_path= model_path + 'patches.json', patches_pos_dict_path = None, 
-                    classifier_model=linear_svm_model,
-                    fct_feature_extraction=extract_hog_feature, 
-                    param_training=param_training, 
-                    results_path=results_path, model_path=model_path)
-
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, my_trainer.coord_label_training_patches, None)
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, my_trainer.coord_label_testing_patches, None)
-
-my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, 0.25)
-my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train, results_path + 'best_trial.pkl')
-# my_trainer.run_prediction(coord_prepared_test, label_prepared_test)
