@@ -158,10 +158,12 @@ def get_minibatch(patch_iter, size):
 
 
 class FileManager(object):
-    def __init__(self, dataset_path, fct_explore_dataset, patch_extraction_parameters, fct_groundtruth_patch):
+    def __init__(self, dataset_path, fct_explore_dataset, patch_extraction_parameters, fct_groundtruth_patch, path_output):
         self.dataset_path = sct.slash_at_the_end(dataset_path, slash=1)
         # This function should take the path to the dataset as input and outputs the list of files (wrt dataset path) that compose the dataset (image + groundtruth)
         self.fct_explore_dataset = fct_explore_dataset
+
+        self.path_output = path_output
 
         self.patch_extraction_parameters = patch_extraction_parameters
         # ratio_dataset represents the ratio between the training, testing and validation datasets.
@@ -169,7 +171,7 @@ class FileManager(object):
         if 'ratio_dataset' in self.patch_extraction_parameters:
             self.ratio_dataset = self.patch_extraction_parameters['ratio_dataset']
         else:
-            self.ratio_dataset = [0.6, 0.2, 0.2]
+            self.ratio_dataset = [0.8, 0.2]
         # patch size is the number of pixels that are in a patch in each dimensions. Patches are only 2D
         # warning: patch size must correspond to the ClassificationModel
         # Example: [32, 32] means a patch with 32x32 pixels
@@ -231,7 +233,7 @@ class FileManager(object):
             yield data
             data = get_minibatch(patch_iter, minibatch_size)
 
-    def decompose_dataset(self, path_output):
+    def decompose_dataset(self):
         array_indexes = range(self.number_of_images)
         np.random.shuffle(array_indexes)
 
@@ -291,7 +293,7 @@ class FileManager(object):
 
             # write results in file
             path_fname, file_fname, ext_fname = sct.extract_fname(self.dataset_path + fname_raw_images[0])
-            with bz2.BZ2File(path_output + 'patches_coordinates_' + file_fname + '.pbz2', 'w') as f:
+            with bz2.BZ2File(self.path_output + 'patches_coordinates_' + file_fname + '.pbz2', 'w') as f:
                 pickle.dump(results, f)
 
             del patches_coordinates
@@ -319,7 +321,7 @@ class FileManager(object):
 
                 # write results in file
                 path_fname, file_fname, ext_fname = sct.extract_fname(self.dataset_path + self.training_dataset[i][0][0])
-                with bz2.BZ2File(path_output + 'patches_coordinates_positives_' + file_fname + '.pbz2', 'w') as f:
+                with bz2.BZ2File(self.path_output + 'patches_coordinates_positives_' + file_fname + '.pbz2', 'w') as f:
                     pickle.dump(results_positive, f)
 
         # TRAINING DATASET
@@ -402,7 +404,7 @@ class FileManager(object):
             'patch_info': self.patch_info
         }
 
-        with bz2.BZ2File(path_output + 'datasets.pbz2', 'w') as f:
+        with bz2.BZ2File(self.path_output + 'datasets.pbz2', 'w') as f:
             pickle.dump(results, f)
 
 
@@ -505,21 +507,23 @@ class KerasConvNet(Sequential):
         if 'batch_size' in self.params:
             self.batch_size = self.params['batch_size']
 
+#path_input = '/home/neuropoly/data/large_nobrain_nopad/'
+#path_output = '/home/neuropoly/data/filemanager_large_nobrain_nopad/'
+path_input = '/home/neuropoly/data/vsmall_nobrain_nopad/'
+path_output = '/home/neuropoly/data/filemanager_vsmall_nobrain_nopad/'
 
-my_file_manager = FileManager(dataset_path='/Users/benjamindeleener/data/data_augmentation/test_very_small/',
+my_file_manager = FileManager(dataset_path=path_input,
                               fct_explore_dataset=extract_list_file_from_path,
                               patch_extraction_parameters={'ratio_dataset': [0.8, 0.2],
                                                            'ratio_patches_voxels': 0.1,
                                                            'patch_size': [32, 32],
                                                            'patch_pixdim': {'axial': [1.0, 1.0]},
-                                                           'extract_all_positive': False,
+                                                           'extract_all_positive': True,
                                                            'extract_all_negative': False,
                                                            'batch_size': 500},
-                              fct_groundtruth_patch=center_of_patch_equal_one)
-my_file_manager.extract_all_positive = True
+                              fct_groundtruth_patch=center_of_patch_equal_one,
+                              path_output=path_output)
 
-path_output = '/Users/benjamindeleener/data/data_augmentation/'
-
-training_dataset, testing_dataset = my_file_manager.decompose_dataset(path_output)
+training_dataset, testing_dataset = my_file_manager.decompose_dataset()
 my_file_manager.explore()
 
