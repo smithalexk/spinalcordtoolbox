@@ -477,14 +477,6 @@ class Trainer():
         self.results_path = sct.slash_at_the_end(results_path, slash=1)
         self.model_path = sct.slash_at_the_end(model_path, slash=1)
 
-        self.stats = {'n_train': 0, 'n_train_pos': 0,
-                        'n_test': 0, 'n_test_pos': 0,
-                        'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'roc': 0.0,
-                        'accuracy_history': [(0, 0)], 'precision_history': [(0, 0)], 'recall_history': [(0, 0)],
-                        'roc_history': [(0, 0)],
-                        't0': time.time(),
-                        'runtime_history': [(0, 0)], 'total_fit_time': 0.0, 'total_hyperopt_time': 0.0}
-
     def prepare_patches(self, fname_raw_images):
         ###############################################################################################################
         #
@@ -687,7 +679,7 @@ class Trainer():
                     else:
                         temp_minibatch = minibatch
 
-    def hyperparam_optimization(self, coord_prepared_train, label_prepared_train, ratio_test):
+    def hyperparam_optimization(self, coord_prepared_train, label_prepared_train):
     ###############################################################################################################
     #
     # TODO:         hyperopt_train_test: To be adapted to CNN architecture: https://github.com/fchollet/keras/issues/1591
@@ -697,16 +689,11 @@ class Trainer():
 
         # hyperparam dict must be provided
         if self.model_hyperparam is not None:
-            nb_subj_test = int(len(coord_prepared_train) * ratio_test) # Nb subjects used for hyperopt testing
+            nb_subj_test = int(len(coord_prepared_train) * self.param_hyperopt['ratio_eval']) # Nb subjects used for hyperopt testing
             nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
             
-            if 'minibatch_size_test' in self.param_training:
-                minibatch_size_test = self.param_training['minibatch_size_test']
-            else:
-                test_minibatch_size = sum(nb_patch_all_train_subj[:nb_subj_test]) # Define minibatch size used for hyperopt testing
-            
-            if 'minibatch_size_train' in self.param_training:
-                minibatch_size_train = self.param_training['minibatch_size_train']
+            if self.param_training['minibatch_size_train'] is not None:
+                train_minibatch_size = self.param_training['minibatch_size_train']
             else:
                 train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
 
@@ -724,16 +711,9 @@ class Trainer():
                 cmpt += 1
 
             # Create minibatch iterators for hyperopt training and testing
-            minibatch_iterator_test = self.iter_minibatches_trainer(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, 
-                                                                test_minibatch_size, self.training_dataset)
             minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
                                                                 train_minibatch_size, self.training_dataset)
-
-            # Same testing dataset for all hyperopt algo
-            test_samples = minibatch_iterator_test.next()
-            X_test = np.array(test_samples['patches_feature'])
-            y_true = np.array(test_samples['patches_label'])
-
+            
             # Create hyperopt dict compatible with hyperopt Lib
             model_hyperparam_hyperopt = {}                             
             for param in self.model_hyperparam:
@@ -746,32 +726,47 @@ class Trainer():
             # Objective function
             def hyperopt_train_test(params):
 
-                    ### Benjamin: ajouter ici self.param_hyperopt['nb_epoch']
-                    self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
+                self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
 
-                    tick = time.time()
-                    self.model.train(X_train, y_train)
-                    toc = time.time()-tick
+                stats = {'n_train': 0, 'n_train_pos': 0,
+                        'n_test': 0, 'n_test_pos': 0,
+                        'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'roc': 0.0,
+                        'accuracy_history': [(0, 0)], 'precision_history': [(0, 0)], 'recall_history': [(0, 0)],
+                        'roc_history': [(0, 0)],
+                        't0': time.time(),
+                        'total_fit_time': 0.0, 'total_hyperopt_time': 0.0}
+                
+                cmpt = 0
+                for n_epoch in range(self.param_training['number_of_epochs']):
+                    for data in minibatch_iterator_train:
+                        X_train = np.array(data['patches_feature'])
+                        y_train = np.array(data['patches_label'])
 
-                    ### Benjamin: ajouter ici self.param_hyperopt['eval_factor']
-                    y_pred = self.model.predict(X_test)
-                    score = self.param_hyperopt['fct'](y_true, y_pred) # Score to maximize
+                        stats['n_train'] += X_train.shape[0]
+                        stats['n_train_pos'] += sum(y_train)
 
-                    return {'loss': -score, 'status': STATUS_OK, 'eval_time': toc}
+                        self.model.train(X_train, y_train)
 
-            cmpt = 0
-            for data in minibatch_iterator_train:
-                X_train = np.array(data['patches_feature'])
-                y_train = np.array(data['patches_label'])
+                        # evaluation
+                        if cmpt % self.param_hyperopt['nb_eval'] == 0 and cmpt != 0:
+                            self.run_prediction(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, stats['n_train'], stats)
+                            self.model.save(self.model_path + self.model_name + '_opt')
+                        cmpt += 1
 
-                # Trials object: results report
-                trials = Trials()
-                # Documentation: https://github.com/hyperopt/hyperopt/wiki/FMin
-                best = fmin(hyperopt_train_test, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
+                stats['total_fit_time'] = time.time() - stats['t0']
+                y_true, y_pred = self.run_prediction(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, [stats['n_train'], trials.tids[-1]], stats)
 
-                # Save results
-                pickle.dump(trials.trials, open(self.results_path + 'trials_' + str(cmpt).zfill(3) + '.pkl', "wb"))
-                cmpt += 1
+                score = self.param_hyperopt['fct'](y_true, y_pred) # Score to maximize
+
+                return {'loss': -score, 'status': STATUS_OK, 'eval_time': stats['total_fit_time']}
+
+            # Trials object: results report
+            trials = Trials()
+            # Documentation: https://github.com/hyperopt/hyperopt/wiki/FMin
+            best = fmin(hyperopt_train_test, model_hyperparam_hyperopt, algo=self.param_hyperopt['algo'], max_evals=self.param_hyperopt['nb_eval'], trials=trials)
+
+            # Save results
+            pickle.dump(trials.trials, open(self.results_path + 'trials.pkl', "wb"))
         
         else:
             print ' '
@@ -835,7 +830,7 @@ class Trainer():
 
             self.model.set_params(model_hyperparam_opt)
             
-            if 'minibatch_size_train' in self.param_training:
+            if self.param_training['minibatch_size_train'] is not None:
                 minibatch_size_train = self.param_training['minibatch_size_train']
             else:
                 minibatch_size_train = sum([len(coord_train[str(i)]) for i in coord_train])
@@ -863,7 +858,7 @@ class Trainer():
             print 'Please provide a hyper parameter dict (called \'model_hyperparam\') in your classifier_model dict'
             print ' '
 
-    def run_prediction(self, coord_test, label_test):
+    def run_prediction(self, coord_test, label_test, fname_out_list, stats=None):
     ###############################################################################################################
     #
     # TODO:     Check CNN compatibility
@@ -871,16 +866,28 @@ class Trainer():
     # 
     ###############################################################################################################
 
-        # 
-        if 'minibatch_size_test' in self.param_training:
+        if self.param_training['minibatch_size_test'] is not None:
             minibatch_size_test = self.param_training['minibatch_size_test']
         else:
             minibatch_size_test = sum([len(coord_test[str(i)]) for i in coord_test])
 
-        minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
+        if stats is None:
+            # Used for Prediction on Testing dataset
+            minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
                                                             minibatch_size_test, self.testing_dataset)
+            stats = {'n_train': 0, 'n_train_pos': 0,
+                        'n_test': 0, 'n_test_pos': 0,
+                        'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'roc': 0.0,
+                        'accuracy_history': [(0, 0)], 'precision_history': [(0, 0)], 'recall_history': [(0, 0)],
+                        'roc_history': [(0, 0)],
+                        't0': time.time(),
+                        'total_fit_time': 0.0, 'total_hyperopt_time': 0.0}
+        else:
+            # Used for Hyperopt
+            minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
+                                                            minibatch_size_test, self.training_dataset)
 
-        self.stats['prediction_time'] = 0
+        stats['prediction_time'] = 0
         y_pred, y_test = [], []
 
         for data_test in minibatch_iterator_test:
@@ -888,37 +895,34 @@ class Trainer():
             y_test_cur = data_test['patches_label']
 
             tick = time.time()
-            # y_pred_cur = self.model.predict(X_test, batch_size=32)
             y_pred_cur = self.model.predict(X_test)
-            self.stats['prediction_time'] += time.time() - tick
-            # y_pred.extend(np.argmax(y_pred_cur, axis=1).tolist())
+            stats['prediction_time'] += time.time() - tick
             y_pred.extend(y_pred_cur)
             y_test.extend(y_test_cur)
-            self.stats['n_test'] += X_test.shape[0]
-            self.stats['n_test_pos'] += sum(y_test_cur)
+            stats['n_test'] += X_test.shape[0]
+            stats['n_test_pos'] += sum(y_test_cur)
 
         y_test = np.array(y_test)
         y_pred = np.array(y_pred)
-        self.stats['accuracy'] = accuracy_score(y_test, y_pred)
-        self.stats['precision'] = precision_score(y_test, y_pred)
-        self.stats['recall'] = recall_score(y_test, y_pred)
-        self.stats['roc'] = roc_auc_score(y_test, y_pred)
+        stats['accuracy'] = accuracy_score(y_test, y_pred)
+        stats['precision'] = precision_score(y_test, y_pred)
+        stats['recall'] = recall_score(y_test, y_pred)
+        stats['roc'] = roc_auc_score(y_test, y_pred)
 
-        acc_history = (self.stats['accuracy'], self.stats['n_train'])
-        self.stats['accuracy_history'].append(acc_history)
+        acc_history = (stats['accuracy'], stats['n_train'])
+        stats['accuracy_history'].append(acc_history)
 
-        precision_history = (self.stats['precision'], self.stats['n_train'])
-        self.stats['precision_history'].append(precision_history)
+        precision_history = (stats['precision'], stats['n_train'])
+        stats['precision_history'].append(precision_history)
 
-        recall_history = (self.stats['recall'], self.stats['n_train'])
-        self.stats['recall_history'].append(recall_history)
+        recall_history = (stats['recall'], stats['n_train'])
+        stats['recall_history'].append(recall_history)
 
-        roc_history = (self.stats['roc'], self.stats['n_train'])
-        self.stats['roc_history'].append(roc_history)
+        roc_history = (stats['roc'], stats['n_train'])
+        stats['roc_history'].append(roc_history)
 
-        run_history = (self.stats['accuracy'])
-        self.stats['runtime_history'].append(run_history)
+        print progress(stats)
 
-        print progress(self.stats)
+        pickle.dump(stats, open(self.results_path + self.model_name + '_eval_' + str(fname_out_list[0]).zfill(12) + '_' + str(fname_out_list[1]).zfill(12) + '.pkl', "wb"))
 
-        pickle.dump(self.stats, open(self.results_path + self.model_name + '_pred.pkl', "wb"))
+        return y_test, y_pred

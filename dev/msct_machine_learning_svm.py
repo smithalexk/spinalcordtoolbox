@@ -20,7 +20,6 @@ from skimage.feature import hog
 from hyperopt import tpe
 from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score
 from sklearn.base import BaseEstimator
-from sklearn.preprocessing import StandardScaler
 from sklearn import svm
 from sklearn.externals import joblib
 
@@ -56,18 +55,12 @@ class Classifier_svm(BaseEstimator):
     def __init__(self, params={'kernel': 'rbf', 'C': 1.0}):
 
         self.clf = svm.SVC()
-        self.scaler = StandardScaler()
         self.params = params
  
     def train(self, X, y):
-        self.scaler.fit(X)
-        X = self.scaler.transform(X)
-
         self.clf.fit(X, y)
  
     def predict(self, X):
-        X = self.scaler.transform(X)
-
         return self.clf.predict(X)
 
     def save(self, fname_out):
@@ -94,17 +87,12 @@ class Classifier_linear_svm(BaseEstimator):
     def __init__(self, params={'C': 1.0, 'loss': 'hinge', 'class_weight': 'None'}):
 
         self.clf = svm.LinearSVC()
-        self.scaler = StandardScaler()
         self.params = params
  
     def train(self, X, y):
-        self.scaler.fit(X)
-        X = self.scaler.transform(X)
-
         self.clf.fit(X, y)
  
     def predict(self, X):
-        X = self.scaler.transform(X)
         return self.clf.predict(X)
 
     def save(self, fname_out):
@@ -270,9 +258,9 @@ methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cut
                             'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0,255]}}
 
-param_training = {'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 0.05,
-                    # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
-                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
+param_training = {'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 0.01,
+                  'minibatch_size_train': None, 'minibatch_size_test': None, # number for CNN, None for SVM
+                  'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'eval_factor': 1, 'ratio_eval':0.4}}
 
 my_trainer = Trainer(data_filemanager_path = data_path,
                     datasets_dict_fname = 'datasets.pbz2',
@@ -284,9 +272,9 @@ my_trainer = Trainer(data_filemanager_path = data_path,
                     results_path=results_path, model_path=model_path)
 
 coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images)
-coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images)
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images)
 
-my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, ratio_test=0.4)
-my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
-# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train, results_path + 'best_trial.pkl')
-my_trainer.run_prediction(coord_prepared_test, label_prepared_test)
+my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
+# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
+# # my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train, results_path + 'best_trial.pkl')
+# my_trainer.run_prediction(coord_prepared_test, label_prepared_test)
