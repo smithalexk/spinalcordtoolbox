@@ -225,23 +225,25 @@ def extract_patch_feature(im, param=None):
     return im
 
 
-# my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/large_nobrain_nopad/',
+
+# my_file_manager = FileManager(dataset_path=path_input,
 #                               fct_explore_dataset=extract_list_file_from_path,
-#                               patch_extraction_parameters={'ratio_dataset': [0.08, 0.04],
-#                                                            'ratio_patches_voxels': 0.001,
+#                               patch_extraction_parameters={'ratio_dataset': [0.8, 0.2],
+#                                                            'ratio_patches_voxels': 0.1,
 #                                                            'patch_size': [32, 32],
 #                                                            'patch_pixdim': {'axial': [1.0, 1.0]},
-#                                                            'extract_all_positive': False,
+#                                                            'extract_all_positive': True,
 #                                                            'extract_all_negative': False,
-#                                                            'batch_size': 200},
-#                               fct_groundtruth_patch=None)
+#                                                            'batch_size': 500},
+#                               fct_groundtruth_patch=center_of_patch_equal_one,
+#                               path_output=path_output)
+
+# training_dataset, testing_dataset = my_file_manager.decompose_dataset()
+# my_file_manager.explore()
 
 results_path = '/Users/chgroc/data/spine_detection/results/'
 model_path = '/Users/chgroc/data/spine_detection/model/'
 data_path = '/Users/chgroc/data/spine_detection/data/'
-
-# training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
-# my_file_manager.explore()
 
 svm_model = {'model_name': 'SVM', 'model': Classifier_svm(svm.SVC),
             'model_hyperparam':{'C': [1, 1000],
@@ -254,11 +256,8 @@ linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(sv
                                         'class_weight': (None, 'balanced'),
                                         'loss': ('hinge', 'squared_hinge')}}
 
-methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 
-                            'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0,255]}}
-methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0,255]}}
-
-param_training = {'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 0.01,
+param_training = {'data_path_local': '/Users/chgroc/data/spine_detection/data/test_very_small/',
+                    'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 0.01,
                   'minibatch_size_train': None, 'minibatch_size_test': None, # number for CNN, None for SVM
                   'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'eval_factor': 1, 'ratio_eval':0.4}}
 

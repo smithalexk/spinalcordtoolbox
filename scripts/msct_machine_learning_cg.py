@@ -73,12 +73,6 @@ def _unpickle_method(func_name, obj, cls):
 copy_reg.pickle(types.MethodType, _pickle_method, _unpickle_method)
 
 
-
-def center_of_patch_equal_one(data):
-    patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
-    return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
-
-
 def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images, patches_coordinates, patch_info, verbose=1):
     # input: list_raw_images
     # input: list_gold_images
@@ -93,7 +87,6 @@ def extract_patches_from_image(path_dataset, fname_raw_images, fname_gold_images
     gold_images = [Image(path_dataset + fname) for fname in fname_gold_images]
 
     for k in range(len(patches_coordinates)):
-
         ind = [patches_coordinates[k][0], patches_coordinates[k][1], patches_coordinates[k][2]]
         patches_raw, patches_gold = [], []
 
@@ -170,7 +163,6 @@ def get_minibatch(patch_iter, size):
 
     """
     data = [(patch['patches_raw'], patch['patches_gold']) for patch in itertools.islice(patch_iter, size)]
-
     if not len(data):
         return {'patches_raw': np.asarray([], dtype=np.float), 'patches_gold': np.asarray([], dtype=np.float)}
 
@@ -180,36 +172,13 @@ def get_minibatch(patch_iter, size):
     return {'patches_raw': patches_raw, 'patches_gold': patches_gold}
 
 
-
-def progress(stats):
-    """Report progress information, return a string."""
-    duration = time.time() - stats['t0']
-    s = str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
-    s += str(stats['n_test']) + " test samples (" + str(stats['n_test_pos']) + " positive)\n"
-    s += "accuracy: " + str(stats['accuracy']) + "\n"
-    s += "precision: " + str(stats['precision']) + "\n"
-    s += "recall: " + str(stats['recall']) + "\n"
-    s += "roc: " + str(stats['roc']) + "\n"
-    s += "in " + str(duration) + "s (" + str(stats['n_train'] / duration) + " samples/sec)"
-    return s
-
-
-def progress_train(stats):
-    """Report progress information, return a string."""
-    s = str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
-
-    if stats['total_hyperopt_time']:
-        s += "Hyper param optimization in: " + str(stats['total_hyperopt_time']) + "s\n"
-
-    s += "Training in: " + str(stats['total_fit_time']) + "s"
-    
-    return s
-
-class FileManager():
-    def __init__(self, dataset_path, fct_explore_dataset, patch_extraction_parameters, fct_groundtruth_patch):
+class FileManager(object):
+    def __init__(self, dataset_path, fct_explore_dataset, patch_extraction_parameters, fct_groundtruth_patch, path_output):
         self.dataset_path = sct.slash_at_the_end(dataset_path, slash=1)
         # This function should take the path to the dataset as input and outputs the list of files (wrt dataset path) that compose the dataset (image + groundtruth)
         self.fct_explore_dataset = fct_explore_dataset
+
+        self.path_output = path_output
 
         self.patch_extraction_parameters = patch_extraction_parameters
         # ratio_dataset represents the ratio between the training, testing and validation datasets.
@@ -217,7 +186,7 @@ class FileManager():
         if 'ratio_dataset' in self.patch_extraction_parameters:
             self.ratio_dataset = self.patch_extraction_parameters['ratio_dataset']
         else:
-            self.ratio_dataset = [0.6, 0.2, 0.2]
+            self.ratio_dataset = [0.8, 0.2]
         # patch size is the number of pixels that are in a patch in each dimensions. Patches are only 2D
         # warning: patch size must correspond to the ClassificationModel
         # Example: [32, 32] means a patch with 32x32 pixels
@@ -270,23 +239,7 @@ class FileManager():
         # len(class_weights) = len(list_classes)
         self.class_weights = {}
 
-    def decompose_dataset(self, path_output):
-        array_indexes = range(self.number_of_images)
-        np.random.shuffle(array_indexes)
-
-        self.training_dataset = self.list_files[np.ix_(array_indexes[:int(self.ratio_dataset[0] * self.number_of_images)])]
-        self.testing_dataset = self.list_files[np.ix_(array_indexes[int(self.ratio_dataset[0] * self.number_of_images):int(self.ratio_dataset[0] * self.number_of_images)
-                                                                                            +int(self.ratio_dataset[1] * self.number_of_images)])]
-
-        results = {
-            'training': {'raw_images': [data[0].tolist() for data in self.training_dataset], 'gold_images': [data[1].tolist() for data in self.training_dataset]},
-            'testing': {'raw_images': [data[0].tolist() for data in self.testing_dataset], 'gold_images': [data[1].tolist() for data in self.testing_dataset]},
-            'dataset_path': self.dataset_path
-        }
-        with open(path_output + 'datasets.json', 'w') as outfile:
-            json.dump(results, outfile)
-
-        return self.training_dataset, self.testing_dataset
+        self.cpu_number = mp.cpu_count()
 
     def iter_minibatches(self, patch_iter, minibatch_size):
         """Generator of minibatches."""
@@ -295,10 +248,16 @@ class FileManager():
             yield data
             data = get_minibatch(patch_iter, minibatch_size)
 
-    def compute_patches_coordinates(self, image):
-        if self.extract_all_negative or self.extract_all_positive:
-            print 'Extract all negative/positive patches: feature not yet ready...'
+    def decompose_dataset(self):
+        array_indexes = range(self.number_of_images)
+        np.random.shuffle(array_indexes)
 
+        self.training_dataset = self.list_files[np.ix_(array_indexes[:int(self.ratio_dataset[0] * self.number_of_images)])]
+        self.testing_dataset = self.list_files[np.ix_(array_indexes[int(self.ratio_dataset[0] * self.number_of_images):])]
+
+        return self.training_dataset, self.testing_dataset
+
+    def compute_patches_coordinates(self, image):
         image_dim = image.dim
 
         x, y, z = np.mgrid[0:image_dim[0], 0:image_dim[1], 0:image_dim[2]]
@@ -309,16 +268,13 @@ class FileManager():
 
         return physical_coordinates[random_batch]
 
-    def explore(self):
-        # training dataset
-        global_results_patches = {'patch_info': self.patch_info}
+    def worker_explore(self, arguments_worker):
+        try:
+            i = arguments_worker[0]
+            dataset = arguments_worker[1]
 
-        # TRAINING DATASET
-        results_training = {}
-        classes_training = {}
-        for i, fnames in enumerate(self.training_dataset):
-            fname_raw_images = self.training_dataset[i][0]
-            fname_gold_images = self.training_dataset[i][1]
+            fname_raw_images = dataset[i][0]
+            fname_gold_images = dataset[i][1]
             reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
 
             patches_coordinates = self.compute_patches_coordinates(reference_image)
@@ -342,21 +298,74 @@ class FileManager():
             number_done = 0
             for data in minibatch_iterator_test:
                 if np.ndim(data['patches_gold']) == 4:
-                    labels.extend(center_of_patch_equal_one(data))
+                    labels.extend(self.fct_groundtruth_patch(data))
                     number_done += data['patches_gold'].shape[0]
                     pbar.update(number_done)
             pbar.finish()
 
-            classes_in_image, counts = np.unique(labels, return_counts=True)
-            for j, cl in enumerate(classes_in_image):
-                if str(cl) not in classes_training:
-                    classes_training[str(cl)] = [counts[j], 0.0]
-                else:
-                    classes_training[str(cl)][0] += counts[j]
+            # processing results
+            results = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
 
-            results_training[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
+            # write results in file
+            path_fname, file_fname, ext_fname = sct.extract_fname(self.dataset_path + fname_raw_images[0])
+            with bz2.BZ2File(self.path_output + 'patches_coordinates_' + file_fname + '.pbz2', 'w') as f:
+                pickle.dump(results, f)
 
-        global_results_patches['training'] = results_training
+            del patches_coordinates
+
+            return [i, labels]
+
+        except KeyboardInterrupt:
+            return
+
+        except Exception as e:
+            print 'Error on line {}'.format(sys.exc_info()[-1].tb_lineno)
+            raise e
+
+    def explore(self):
+        if self.extract_all_positive:
+            for i in range(len(self.training_dataset)):
+                fname_gold_image = self.training_dataset[i][1][0]  # first gold image is the reference
+                im_gold = Image(self.dataset_path + fname_gold_image)
+                coordinates_positive = np.where(im_gold.data == 1)
+                coordinates_positive = np.asarray([[coordinates_positive[0][j], coordinates_positive[1][j], coordinates_positive[2][j]] for j in range(len(coordinates_positive[0]))])
+                coordinates_positive = np.asarray(im_gold.transfo_pix2phys(coordinates_positive))
+                label_positive = np.ones(coordinates_positive.shape[0])
+
+                results_positive = [[coordinates_positive[j, :].tolist(), label_positive[j]] for j in range(len(label_positive))]
+
+                # write results in file
+                path_fname, file_fname, ext_fname = sct.extract_fname(self.dataset_path + self.training_dataset[i][0][0])
+                with bz2.BZ2File(self.path_output + 'patches_coordinates_positives_' + file_fname + '.pbz2', 'w') as f:
+                    pickle.dump(results_positive, f)
+
+        # TRAINING DATASET
+        classes_training = {}
+
+        pool = mp.Pool(processes=self.cpu_number)
+        results = pool.map(self.worker_explore, itertools.izip(range(len(self.training_dataset)), itertools.repeat(self.training_dataset)))
+
+        pool.close()
+        try:
+            pool.join()  # waiting for all the jobs to be done
+            for result in results:
+                labels = result[1]
+
+                classes_in_image, counts = np.unique(labels, return_counts=True)
+                for j, cl in enumerate(classes_in_image):
+                    if str(cl) not in classes_training:
+                        classes_training[str(cl)] = [counts[j], 0.0]
+                    else:
+                        classes_training[str(cl)][0] += counts[j]
+
+        except KeyboardInterrupt:
+            print "\nWarning: Caught KeyboardInterrupt, terminating workers"
+            pool.terminate()
+            sys.exit(2)
+        except Exception as e:
+            print "Error in FileManager on line {}".format(sys.exc_info()[-1].tb_lineno)
+            print e
+            sys.exit(2)
 
         count_max_class, max_class = 0, ''
         for cl in classes_training:
@@ -365,51 +374,33 @@ class FileManager():
         for cl in classes_training:
             classes_training[cl][1] = classes_training[cl][0] / float(classes_training[max_class][0])
 
-
         # TESTING DATASET
-        results_testing = {}
         classes_testing = {}
-        for i, fnames in enumerate(self.testing_dataset):
-            fname_raw_images = self.testing_dataset[i][0]
-            fname_gold_images = self.testing_dataset[i][1]
-            reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
 
-            patches_coordinates = self.compute_patches_coordinates(reference_image)
-            print 'Number of patches in ' + fname_raw_images[0] + ' = ' + str(patches_coordinates.shape[0])
+        pool = mp.Pool(processes=self.cpu_number)
+        results = pool.map(self.worker_explore, itertools.izip(range(len(self.testing_dataset)), itertools.repeat(self.testing_dataset)))
 
-            stream_data = extract_patches_from_image(path_dataset=self.dataset_path,
-                                                     fname_raw_images=fname_raw_images,
-                                                     fname_gold_images=fname_gold_images,
-                                                     patches_coordinates=patches_coordinates,
-                                                     patch_info=self.patch_info,
-                                                     verbose=1)
+        pool.close()
+        try:
+            pool.join()  # waiting for all the jobs to be done
+            for result in results:
+                labels = result[1]
 
-            minibatch_iterator_test = self.iter_minibatches(stream_data, self.batch_size)
-            labels = []
-            pbar = ProgressBar(widgets=[
-                Timer(),
-                ' ', Percentage(),
-                ' ', Bar(),
-                ' ', ETA()], max_value=patches_coordinates.shape[0])
-            pbar.start()
-            number_done = 0
-            for data in minibatch_iterator_test:
-                if np.ndim(data['patches_gold']) == 4:
-                    labels.extend(center_of_patch_equal_one(data))
-                    number_done += data['patches_gold'].shape[0]
-                    pbar.update(number_done)
-            pbar.finish()
+                classes_in_image, counts = np.unique(labels, return_counts=True)
+                for j, cl in enumerate(classes_in_image):
+                    if str(cl) not in classes_testing:
+                        classes_testing[str(cl)] = [counts[j], 0.0]
+                    else:
+                        classes_testing[str(cl)][0] += counts[j]
 
-            classes_in_image, counts = np.unique(labels, return_counts=True)
-            for j, cl in enumerate(classes_in_image):
-                if str(cl) not in classes_testing:
-                    classes_testing[str(cl)] = [counts[j], 0.0]
-                else:
-                    classes_testing[str(cl)][0] += counts[j]
-
-            results_testing[str(i)] = [[patches_coordinates[j, :].tolist(), labels[j]] for j in range(len(labels))]
-
-        global_results_patches['testing'] = results_testing
+        except KeyboardInterrupt:
+            print "\nWarning: Caught KeyboardInterrupt, terminating workers"
+            pool.terminate()
+            sys.exit(2)
+        except Exception as e:
+            print "Error in FileManager on line {}".format(sys.exc_info()[-1].tb_lineno)
+            print e
+            sys.exit(2)
 
         count_max_class, max_class = 0, ''
         for cl in classes_testing:
@@ -418,10 +409,19 @@ class FileManager():
         for cl in classes_testing:
             classes_testing[cl][1] = classes_testing[cl][0] / float(classes_testing[max_class][0])
 
-        global_results_patches['statistics'] = {'classes_training': classes_training, 'classes_testing': classes_testing}
+        results = {
+            'training': {'raw_images': [data[0].tolist() for data in self.training_dataset],
+                         'gold_images': [data[1].tolist() for data in self.training_dataset]},
+            'testing': {'raw_images': [data[0].tolist() for data in self.testing_dataset],
+                        'gold_images': [data[1].tolist() for data in self.testing_dataset]},
+            'dataset_path': self.dataset_path,
+            'statistics': {'classes_training': classes_training, 'classes_testing': classes_testing},
+            'patch_info': self.patch_info
+        }
 
-        with open(path_output + 'patches.json', 'w') as outfile:
-            json.dump(global_results_patches, outfile)
+        with bz2.BZ2File(self.path_output + 'datasets.pbz2', 'w') as f:
+            pickle.dump(results, f)
+
 
 
 class Trainer():
@@ -435,12 +435,7 @@ class Trainer():
         self.datasets_dict_fname = datasets_dict_fname
 
         self.dataset_path = sct.slash_at_the_end(str(datasets_dict['dataset_path']), slash=1)
-        print self.dataset_path
-        print ' '
-        print 'Attention path modifie'
-        self.dataset_path = sct.slash_at_the_end('/Users/chgroc/data/spine_detection/data/test_very_small/', slash=1)
-        print self.dataset_path
-        print ' '
+
 
         self.dataset_stats = datasets_dict['statistics']
         self.patch_info = datasets_dict['patch_info']
@@ -468,6 +463,9 @@ class Trainer():
 
         self.param_training = param_training
         self.param_hyperopt = self.param_training['hyperopt']
+
+        if 'data_path_local' in self.param_training:
+            self.dataset_path = sct.slash_at_the_end(self.param_training['data_path_local'], slash=1)
 
         if 'ratio_patch_per_img' in self.param_training:
             self.ratio_patch_per_img = self.param_training['ratio_patch_per_img']
@@ -748,7 +746,7 @@ class Trainer():
                         self.model.train(X_train, y_train)
 
                         # evaluation
-                        if cmpt % self.param_hyperopt['nb_eval'] == 0 and cmpt != 0:
+                        if cmpt % self.param_hyperopt['eval_factor'] == 0 and cmpt != 0:
                             self.run_prediction(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, stats['n_train'], stats)
                             self.model.save(self.model_path + self.model_name + '_opt')
                         cmpt += 1
