@@ -151,8 +151,6 @@ class KerasConvNet(Sequential):
         return super(KerasConvNet, self).predict(X, batch_size=self.batch_size)
 
     def set_params(self, params):
-        if 'batch_size' in params:
-            self.batch_size = params['batch_size']
         if 'depth_layers_features' in params:
             self.number_of_layer_per_depth = params['number_of_features']
         if 'number_of_feature_dense' in params:
@@ -223,15 +221,15 @@ params_cnn = {'patch_size': [32, 32],
              }
 
 cnn_model = {'model_name': 'CNN', 'model': KerasConvNet(params_cnn),
-             'model_hyperparam': {'batch_size': (128),
-                                  'class_weight': ('balanced')}}
+             'model_hyperparam': {'class_weight': ('balanced')}}
 
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0, 255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0, 255]}}
 
 param_training = {'number_of_epochs': 50, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
-                    # 'minibatch_size_train': 500, 'minibatch_size_test': 500, # For CNN
-                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'nb_epoch': 1, 'eval_factor': 1}}
+                  'minibatch_size_train': None, 'minibatch_size_test': None,  # number for CNN, None for SVM
+                  'hyperopt': {'algo': tpe.suggest, 'nb_eval': 1000, 'fct': roc_auc_score, 'eval_factor': 1000,
+                               'ratio_eval': 0.1}}
 
 ### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
 my_trainer = Trainer(data_filemanager_path=data_path,
