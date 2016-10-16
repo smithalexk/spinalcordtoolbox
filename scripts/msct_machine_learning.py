@@ -431,8 +431,9 @@ def extract_list_file_from_path(path_data):
                 continue
             f_seg = None
             for fname_seg in files:
-                if fname_im[:-7] in fname_seg:
-                    f_seg = fname_seg
+                if 'seg' in fname_im or 'gmseg' in fname_seg:
+                    if fname_im[:-7] in fname_seg:
+                        f_seg = fname_seg
             list_data.append([[fname_im], [f_seg]])
 
     return list_data
