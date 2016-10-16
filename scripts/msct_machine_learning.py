@@ -211,7 +211,6 @@ class FileManager(object):
         self.fct_groundtruth_patch = fct_groundtruth_patch
 
         self.list_files = np.array(self.fct_explore_dataset(self.dataset_path))
-        print self.list_files
         self.number_of_images = len(self.list_files)
 
         self.training_dataset, self.testing_dataset = [], []
@@ -309,8 +308,6 @@ class FileManager(object):
             raise e
 
     def explore(self):
-        print [[data[0].tolist(), data[1].tolist()] for data in self.training_dataset]
-
         if self.extract_all_positive:
             for i in range(len(self.training_dataset)):
                 fname_gold_image = self.training_dataset[i][1][0]  # first gold image is the reference
@@ -340,7 +337,6 @@ class FileManager(object):
                 labels = result[1]
 
                 classes_in_image, counts = np.unique(labels, return_counts=True)
-                print classes_in_image
                 for j, cl in enumerate(classes_in_image):
                     if str(cl) not in classes_training:
                         classes_training[str(cl)] = [counts[j], 0.0]
@@ -355,8 +351,6 @@ class FileManager(object):
             print "Error in FileManager on line {}".format(sys.exc_info()[-1].tb_lineno)
             print e
             sys.exit(2)
-
-        print classes_training
 
         count_max_class, max_class = 0, ''
         for cl in classes_training:
