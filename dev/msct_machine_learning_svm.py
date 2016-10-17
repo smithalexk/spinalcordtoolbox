@@ -270,9 +270,9 @@ my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     param_training=param_training, 
                     results_path=results_path, model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, 0.005)
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, [0.001, 0.015])
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, [1.0, 1.0])
 
-# my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
-# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
+my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
+my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
 # my_trainer.predict(coord_prepared_test, label_prepared_test)

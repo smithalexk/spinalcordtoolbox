@@ -481,7 +481,7 @@ class Trainer():
         self.results_path = sct.slash_at_the_end(results_path, slash=1)
         self.model_path = sct.slash_at_the_end(model_path, slash=1)
 
-    def prepare_patches(self, fname_raw_images, ratio_patch_per_img=1.0):
+    def prepare_patches(self, fname_raw_images, ratio_patch_per_img=[1.0, 1.0]):
         ###############################################################################################################
         #
         # Output:       Coordinates Dict{'index in datasets.pbz2': [coord[float, float, float], ...], ...}
@@ -520,7 +520,7 @@ class Trainer():
                 nb_patches_pos_tot = len(coord_label_patches_pos)
                 # For CNN, nb_patches_pos_to_extract = nb_patches_pos_tot
                 # Same ratio to extract from (random) patches and from pos patches
-                nb_patches_pos_to_extract = int(ratio_patch_per_img * nb_patches_pos_tot)
+                nb_patches_pos_to_extract = int(ratio_patch_per_img[1] * nb_patches_pos_tot)
 
                 # Iteration for all nb_patches_pos_to_extract pos patches
                 for i_patch_pos in range(nb_patches_pos_to_extract):
@@ -531,15 +531,15 @@ class Trainer():
                 print '... if a label class balance is expected: Please provide Coordinates of positive patches\n'
 
             nb_patches_tot = len(coord_label_patches)
-            nb_patches_to_extract = int(ratio_patch_per_img * nb_patches_tot)
+            nb_patches_to_extract = int(ratio_patch_per_img[0] * nb_patches_tot)
 
             # Iteration for all nb_patches_to_extract patches
             for i_patch in range(nb_patches_to_extract):
                 coord_prepared_tmp.append(coord_label_patches[i_patch][0])
                 label_prepared_tmp.append(coord_label_patches[i_patch][1])
 
-            print nb_patches_to_extract
-            print nb_patches_pos_to_extract
+            print float(nb_patches_pos_to_extract)/nb_patches_to_extract
+            print nb_patches_pos_to_extract + nb_patches_to_extract
 
             # Shuffle to prevent the case where all pos patches are gather in one minibatch
             index_shuf = range(len(coord_prepared_tmp))
