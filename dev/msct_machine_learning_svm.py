@@ -26,11 +26,7 @@ from sklearn.externals import joblib
 ########## Change path
 import sys
 sys.path.insert(0, '/Users/chgroc/spinalcordtoolbox/scripts')
-from msct_machine_learning_cg import Trainer, FileManager
-
-# TODO: Rajouter center_of_patch_equal_one dans user case
-#       Mettre a jour File Manager + fct au dessus
-#       Faire 2 fichiers dans dev: CNN et SVM
+from msct_machine_learning import Trainer, FileManager
 
 class Model(object):
     def __init__(self, params):
@@ -224,6 +220,9 @@ def extract_patch_feature(im, param=None):
 
     return im
 
+def center_of_patch_equal_one(data):
+    patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
+    return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
 
 
 # my_file_manager = FileManager(dataset_path=path_input,
@@ -245,11 +244,16 @@ results_path = '/Users/chgroc/data/spine_detection/results/'
 model_path = '/Users/chgroc/data/spine_detection/model/'
 data_path = '/Users/chgroc/data/spine_detection/data/'
 
+# svm_model = {'model_name': 'SVM', 'model': Classifier_svm(svm.SVC),
+#             'model_hyperparam':{'C': [1, 1000],
+#                                 'kernel': ('sigmoid', 'poly', 'rbf'),
+#                                 'gamma': [0, 20],
+#                                 'class_weight': (None, 'balanced')}}
 svm_model = {'model_name': 'SVM', 'model': Classifier_svm(svm.SVC),
-            'model_hyperparam':{'C': [1, 1000],
-                                'kernel': ('sigmoid', 'poly', 'rbf'),
-                                'gamma': [0, 20],
-                                'class_weight': (None, 'balanced')}}
+            'model_hyperparam':{'C': [1],
+                                'kernel': ['sigmoid'],
+                                'gamma': [0],
+                                'class_weight': ['balanced']}}
 
 linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(svm.LinearSVC),
                     'model_hyperparam':{'C': [1, 1000],
@@ -259,13 +263,13 @@ linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(sv
 param_training = {'data_path_local': '/Users/chgroc/data/spine_detection/data/test_very_small/',
                     'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 0.01,
                   'minibatch_size_train': None, 'minibatch_size_test': None, # number for CNN, None for SVM
-                  'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'eval_factor': 1, 'ratio_eval':0.4}}
+                  'hyperopt': {'algo':tpe.suggest, 'nb_eval':1, 'fct': roc_auc_score, 'eval_factor': 1, 'ratio_eval':0.4}}
 
 my_trainer = Trainer(data_filemanager_path = data_path,
                     datasets_dict_fname = 'datasets.pbz2',
                     patches_dict_prefixe = 'patches_coordinates_', 
                     patches_pos_dict_prefixe = 'patches_coordinates_positives_', 
-                    classifier_model=linear_svm_model,
+                    classifier_model=svm_model,
                     fct_feature_extraction=extract_hog_feature, 
                     param_training=param_training, 
                     results_path=results_path, model_path=model_path)
