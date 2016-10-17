@@ -538,6 +538,9 @@ class Trainer():
                 coord_prepared_tmp.append(coord_label_patches[i_patch][0])
                 label_prepared_tmp.append(coord_label_patches[i_patch][1])
 
+            print nb_patches_to_extract
+            print nb_patches_pos_to_extract
+
             # Shuffle to prevent the case where all pos patches are gather in one minibatch
             index_shuf = range(len(coord_prepared_tmp))
             np.random.shuffle(index_shuf)
@@ -764,7 +767,7 @@ class Trainer():
                 stats['total_fit_time'] = time.time() - stats['t0']
                 
                 y_true, y_pred = self.run_prediction(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, [trials.tids[-1], stats['n_train']], stats)
-                self.model.save(self.model_path + self.model_name + '_' + str(stats['n_train']).zfill(12) + '_' + str(trials.tids[-1]).zfill(6))
+                self.model.save(self.model_path + self.model_name + '_' + str(trials.tids[-1]).zfill(6) + '_' + str(stats['n_train']).zfill(12))
 
                 score = self.param_hyperopt['fct'](y_true, y_pred) # Score to maximize
 
@@ -897,7 +900,7 @@ class Trainer():
             # Used for Hyperopt
             minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
                                                             minibatch_size_test, self.training_dataset)
-            fname_out_progress = self.results_path + self.model_name + '_eval_' + str(fname_out[0]).zfill(12) + '_' + str(fname_out[1]).zfill(6) + '.pkl'
+            fname_out_progress = self.results_path + self.model_name + '_eval_' + str(fname_out[0]).zfill(6) + '_' + str(fname_out[1]).zfill(12) + '.pkl'
 
         
         y_pred, y_test = [], []
