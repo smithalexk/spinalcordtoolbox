@@ -263,13 +263,13 @@ linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_linear_svm(sv
 param_training = {'data_path_local': '/Users/chgroc/data/spine_detection/data/test_very_small/',
                     'number_of_epochs': 1, 'patch_size': [32, 32], 'ratio_patch_per_img': 0.01,
                   'minibatch_size_train': None, 'minibatch_size_test': None, # number for CNN, None for SVM
-                  'hyperopt': {'algo':tpe.suggest, 'nb_eval':1, 'fct': roc_auc_score, 'eval_factor': 1, 'ratio_eval':0.4}}
+                  'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'eval_factor': 1, 'ratio_eval':0.4}}
 
 my_trainer = Trainer(data_filemanager_path = data_path,
                     datasets_dict_fname = 'datasets.pbz2',
                     patches_dict_prefixe = 'patches_coordinates_', 
                     patches_pos_dict_prefixe = 'patches_coordinates_positives_', 
-                    classifier_model=svm_model,
+                    classifier_model=linear_svm_model,
                     fct_feature_extraction=extract_hog_feature, 
                     param_training=param_training, 
                     results_path=results_path, model_path=model_path)
