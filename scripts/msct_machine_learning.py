@@ -27,12 +27,14 @@ import types
 # import pickle
 from skimage.feature import hog
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials, space_eval
-from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score, roc_curve
 from sklearn.externals import joblib
 from os import listdir
 from os.path import isfile, join
 import time
 import random 
+import math
+import matplotlib.pyplot as plt
 
 
 def _pickle_method(method):
@@ -497,6 +499,8 @@ class Trainer():
         # Iteration for all INPUT fname subjects
         for i, fname in enumerate(fname_raw_images):
 
+            print fname
+
             # By default the first: fname[0]
             fname_patch = self.patches_dict_prefixe + fname[0].split('.',1)[0] + '.' + self.datasets_dict_fname.split('.',1)[1]
             with bz2.BZ2File(self.data_filemanager_path + fname_patch, 'rb') as f:
@@ -537,9 +541,6 @@ class Trainer():
             for i_patch in range(nb_patches_to_extract):
                 coord_prepared_tmp.append(coord_label_patches[i_patch][0])
                 label_prepared_tmp.append(coord_label_patches[i_patch][1])
-
-            print float(nb_patches_pos_to_extract)/nb_patches_to_extract
-            print nb_patches_pos_to_extract + nb_patches_to_extract
 
             # Shuffle to prevent the case where all pos patches are gather in one minibatch
             index_shuf = range(len(coord_prepared_tmp))
@@ -721,14 +722,17 @@ class Trainer():
             model_hyperparam_hyperopt = {}                             
             for param in self.model_hyperparam:
                 param_cur = self.model_hyperparam[param]
-                if len(param_cur) == 1:
-                    model_hyperparam_hyperopt[param] = param_cur[0]
+                if type(param_cur) is not list and type(param_cur) is not tuple:
+                    model_hyperparam_hyperopt[param] = param_cur
+                elif type(param_cur) is list and len(param_cur) == 2:
+                    model_hyperparam_hyperopt[param] = hp.uniform(param, param_cur[0], param_cur[1])
                 else:
-                    if type(param_cur) is list and len(param_cur) == 2:
-                        model_hyperparam_hyperopt[param] = hp.uniform(param, param_cur[0], param_cur[1])
-                    else:
-                        model_hyperparam_hyperopt[param] = hp.choice(param, param_cur)
-            
+                    model_hyperparam_hyperopt[param] = hp.choice(param, param_cur)
+
+            print 'Hyperparam Dict to test:'
+            print model_hyperparam_hyperopt
+            print ' '
+
             # Objective function
             def hyperopt_train_test(params):
 
@@ -737,8 +741,6 @@ class Trainer():
                                                                 train_minibatch_size, self.training_dataset)
 
                 self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
-
-                print params
 
                 stats = {'n_train': 0, 'n_train_pos': 0,
                         'n_test': 0, 'n_test_pos': 0,
@@ -883,6 +885,11 @@ class Trainer():
         else:
             minibatch_size_test = sum([len(coord_test[str(i)]) for i in coord_test])
 
+        if self.param_training['minibatch_size_train'] is not None: # For HyperOpt
+            minibatch_size_train = self.param_training['minibatch_size_train']
+        else:
+            minibatch_size_train = sum([len(coord_test[str(i)]) for i in coord_test])
+
         if stats is None:
             # Used for Prediction on Testing dataset
             minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
@@ -899,7 +906,7 @@ class Trainer():
         else:
             # Used for Hyperopt
             minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
-                                                            minibatch_size_test, self.training_dataset)
+                                                            minibatch_size_train, self.training_dataset)
             fname_out_progress = self.results_path + self.model_name + '_eval_' + str(fname_out[0]).zfill(6) + '_' + str(fname_out[1]).zfill(12) + '.pkl'
 
         
@@ -919,10 +926,35 @@ class Trainer():
 
         y_test = np.array(y_test)
         y_pred = np.array(y_pred)
+
+        fpr, tpr, thresholds = roc_curve(y_test, y_pred[:,1], pos_label=1)
+
+        roc_coord = np.column_stack((fpr, tpr))
+        roc_dist = [math.hypot(roc_coord[i,0] - 0.0, roc_coord[i,1] - 1.0) for coord in range(roc_coord.shape[0])]
+        thresholds = list(thresholds)
+        best_treshold = thresholds[roc_dist.index(min(roc_dist))]
+        y_pred = [1 if y_pred[j,1] >= best_treshold else 0 for j in range(y_pred.shape[0])]
+
+        print sum(y_pred)
+
         stats['accuracy'] = accuracy_score(y_test, y_pred)
         stats['precision'] = precision_score(y_test, y_pred)
         stats['recall'] = recall_score(y_test, y_pred)
         stats['roc'] = roc_auc_score(y_test, y_pred)
+
+
+        plt.figure()
+        plt.plot(fpr, tpr, color='darkorange',
+                 lw=2, label='ROC curve (area = %0.2f)' % roc_auc_score(y_test, y_pred))
+        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver operating characteristic example')
+        plt.legend(loc="lower right")
+        plt.show()
+        
 
         if 'accuracy_history' in stats:
             acc_history = (stats['accuracy'], stats['n_train'])
