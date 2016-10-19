@@ -669,23 +669,79 @@ class Trainer():
                                                                         fname_raw_images=fname_raw_cur,
                                                                         patches_coordinates=coord_dict_prepared[str(index_fname_image)],
                                                                         patches_labels=label_dict_prepared[str(index_fname_image)])
+            cmpt = 0
+            while cmpt == 0 or minibatch['patches_raw'].shape[0] == minibatch_size:
+                cmpt = 1
+                minibatch = self.get_minibatch_patch_feature_label(stream_data, minibatch_size - temp_minibatch['patches_raw'].shape[0])
 
+                if minibatch['patches_raw'].shape[0] == minibatch_size:
+                    yield minibatch
+
+                else:
+
+                    if temp_minibatch['patches_raw'].shape[0] == 0:
+                        temp_minibatch = minibatch # len!=0
+
+                    else:
+                        patches_raw_temp = np.concatenate([temp_minibatch['patches_raw'], minibatch['patches_raw']], axis=0)
+                        patches_feature_temp = np.concatenate([temp_minibatch['patches_feature'], minibatch['patches_feature']], axis=0)
+                        patches_gold_temp = np.concatenate([temp_minibatch['patches_label'], minibatch['patches_label']], axis=0)
+                        minibatch = {'patches_raw': patches_raw_temp, 'patches_feature': patches_feature_temp, 'patches_label': patches_gold_temp} # concat
+                        
+                        if minibatch['patches_raw'].shape[0] == minibatch_size:
+                            temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )}
+                            yield minibatch
+                        else:
+                            temp_minibatch = minibatch
+
+    def iter_minibatches_trainer_print(self, coord_dict_prepared, label_dict_prepared, minibatch_size, fname_dataset):
+    ###############################################################################################################
+    #
+    # TODO:         Should be checked
+    #               patches_features, patches_label: multichannel case
+    # 
+    ###############################################################################################################
+
+        temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )} # len=0 
+        stg = ''
+        stg += 'init'
+
+        for index_fname_image in coord_dict_prepared:
+
+            stg += str(index_fname_image)
+
+            fname_raw_cur = map(str, fname_dataset['raw_images'][int(index_fname_image)])
+            fname_gold_cur = map(str, fname_dataset['gold_images'][int(index_fname_image)])
+            
+            stream_data = self.extract_patch_feature_label_from_image(path_dataset=self.dataset_path,
+                                                                        fname_raw_images=fname_raw_cur,
+                                                                        patches_coordinates=coord_dict_prepared[str(index_fname_image)],
+                                                                        patches_labels=label_dict_prepared[str(index_fname_image)])
+            
             minibatch = self.get_minibatch_patch_feature_label(stream_data, minibatch_size - temp_minibatch['patches_raw'].shape[0])
+            stg += '\nmini_size-tmp ' + str(minibatch_size - temp_minibatch['patches_raw'].shape[0])
 
             if minibatch['patches_raw'].shape[0] == minibatch_size:
-                yield minibatch
+                stg += '\nyield1'
+                yield stg
             else:
+                stg += '\ncond2'
+                stg += '\ntmp ' + str(temp_minibatch['patches_raw'].shape[0])
                 if temp_minibatch['patches_raw'].shape[0] == 0:
                     temp_minibatch = minibatch # len!=0
+                    stg += '\ntmp = 0'
                 else:
+                    stg += '\ntmp != 0'
                     patches_raw_temp = np.concatenate([temp_minibatch['patches_raw'], minibatch['patches_raw']], axis=0)
                     patches_feature_temp = np.concatenate([temp_minibatch['patches_feature'], minibatch['patches_feature']], axis=0)
                     patches_gold_temp = np.concatenate([temp_minibatch['patches_label'], minibatch['patches_label']], axis=0)
                     minibatch = {'patches_raw': patches_raw_temp, 'patches_feature': patches_feature_temp, 'patches_label': patches_gold_temp} # concat
                     if minibatch['patches_raw'].shape[0] == minibatch_size:
                         temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )}
-                        yield minibatch
+                        stg += '\nyield2'
+                        yield stg
                     else:
+                        stg += '\nmini_cur ' + str(minibatch['patches_raw'].shape[0])
                         temp_minibatch = minibatch
 
     def hyperparam_optimization(self, coord_prepared_train, label_prepared_train):
@@ -750,7 +806,7 @@ class Trainer():
                 
                 cmpt = 0
                 for n_epoch in range(self.param_training['number_of_epochs']):
-                    for data in minibatch_iterator_train:
+                    for i, data in enumerate(minibatch_iterator_train):
                         X_train = np.array(data['patches_feature'])
                         y_train = np.array(data['patches_label'])
 
@@ -849,7 +905,7 @@ class Trainer():
         print '... with ' + str(len(coord_train)) + ' images for training\n'
         
         for n_epoch in range(self.param_training['number_of_epochs']):
-            for data in minibatch_iterator_train:
+            for i, data in enumerate(minibatch_iterator_train):
                 X_train = np.array(data['patches_feature'])
                 y_train = np.array(data['patches_label'])
 
@@ -886,6 +942,7 @@ class Trainer():
 
         if self.param_training['minibatch_size_test'] is not None:
             minibatch_size_test = self.param_training['minibatch_size_test']
+            print 'tot minibatch test :  ' + str(sum([len(coord_test[str(i)]) for i in coord_test]))
         else:
             minibatch_size_test = sum([len(coord_test[str(i)]) for i in coord_test])
 
@@ -897,6 +954,8 @@ class Trainer():
         if stats is None:
             # Used for Prediction on Testing dataset
             minibatch_iterator_test = self.iter_minibatches_trainer(coord_test, label_test, 
+                                                            minibatch_size_test, self.testing_dataset)
+            minibatch_iterator_test_print = self.iter_minibatches_trainer_print(coord_test, label_test, 
                                                             minibatch_size_test, self.testing_dataset)
             stats = {'n_test': 0, 'n_test_pos': 0,
                     'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'roc': 0.0,
@@ -927,7 +986,7 @@ class Trainer():
         
         y_pred, y_test = [], []
 
-        for data_test in minibatch_iterator_test:
+        for i, data_test in enumerate(minibatch_iterator_test):
             X_test = data_test['patches_feature']
             y_test_cur = data_test['patches_label']
 
