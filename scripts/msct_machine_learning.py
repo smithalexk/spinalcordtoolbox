@@ -768,12 +768,12 @@ class Trainer():
 
                 stats['total_fit_time'] = time.time() - stats['t0']
                 
-                y_true, y_pred = self.run_prediction(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, [trials.tids[-1], stats['n_train']], stats)
+                y_true, y_pred, thrsh = self.run_prediction(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, [trials.tids[-1], stats['n_train']], stats)
                 self.model.save(self.model_path + self.model_name + '_' + str(trials.tids[-1]).zfill(6) + '_' + str(stats['n_train']).zfill(12))
 
                 score = self.param_hyperopt['fct'](y_true, y_pred) # Score to maximize
 
-                return {'loss': -score, 'status': STATUS_OK, 'eval_time': stats['total_fit_time']}
+                return {'loss': -score, 'status': STATUS_OK, 'eval_time': stats['total_fit_time'], 'thrsh': thrsh}
 
             print '\nStarting Hyperopt...'
             print '... with ' + str(len(coord_prepared_train)) + ' images for training'
@@ -815,20 +815,22 @@ class Trainer():
         total_hyperopt_time = sum(eval_time_list)
         idx_best_params = loss_list.index(min(loss_list))
         best_params = trial[idx_best_params]['misc']['vals']
-        model_hyperparam_opt = {}
-        for k in self.model_hyperparam.keys():
-            if len(self.model_hyperparam[k]) == 1:
-                model_hyperparam_opt[k] = self.model_hyperparam[k][0]
+
+        # Create hyperopt dict compatible with hyperopt Lib
+        model_hyperparam_opt = {}                             
+        for param_key in self.model_hyperparam:
+            param_cur = self.model_hyperparam[param_key]
+            if type(param_cur) is not list and type(param_cur) is not tuple:
+                model_hyperparam_opt[param_key] = param_cur
+            elif type(param_cur) is list and len(param_cur) == 2:
+                model_hyperparam_opt[param_key] = float(best_params[param_key][0])
             else:
-                if isinstance(best_params[k][0], int):
-                    model_hyperparam_opt[k] = self.model_hyperparam[k][best_params[k][0]]
-                else:
-                    model_hyperparam_opt[k] = float(best_params[k][0])
+                model_hyperparam_opt[param_key] = self.model_hyperparam[param_key][best_params[param_key][0]]
 
         print 'Hyperopt best score: ' + str(round(-trials_best_score,3))
         print 'Total hyperopt time: ' + str(round(total_hyperopt_time,3)) + 's'
         print 'Best hyper params: ' + str(model_hyperparam_opt)
-        
+
         self.model.set_params(model_hyperparam_opt)
             
         if self.param_training['minibatch_size_train'] is not None:
@@ -875,6 +877,8 @@ class Trainer():
     def run_prediction(self, coord_test, label_test, fname_out='', stats=None):
     ###############################################################################################################
     #
+    # NOTES:    Only Specify fname_out and stats during HyperOpt step
+    #
     # TODO:     Check CNN compatibility
     #           Commented lines: used in msct_keras_classification
     # 
@@ -900,8 +904,19 @@ class Trainer():
 
             fname_out_progress = self.results_path + self.model_name + '_test.pkl'
 
+            # Find threshold value from training
+            fname_trial = self.results_path + self.model_name + '_trials.pkl'
+            with open(fname_trial) as outfile:    
+                trial = pickle.load(outfile)
+                outfile.close()
+            loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
+            thrsh_list = [trial[i]['result']['thrsh'] for i in range(len(trial))]
+            idx_best_params = loss_list.index(min(loss_list))
+            threshold = trial[idx_best_params]['result']['thrsh']
+
             print '\nStarting Testing...'
-            print '... with ' + str(len(coord_test)) + ' images for testing\n'
+            print '... with ' + str(len(coord_test)) + ' images for testing'
+            print '... threshold value: ' + str(threshold) + '\n'
 
         else:
             # Used for Hyperopt
@@ -921,6 +936,7 @@ class Trainer():
             stats['total_predict_time'] += time.time() - tick
             y_pred.extend(y_pred_cur)
             y_test.extend(y_test_cur)
+            print X_test.shape[0]
             stats['n_test'] += X_test.shape[0]
             stats['n_test_pos'] += sum(y_test_cur)
 
@@ -928,33 +944,37 @@ class Trainer():
         y_pred = np.array(y_pred)
 
         fpr, tpr, thresholds = roc_curve(y_test, y_pred[:,1], pos_label=1)
+        
+        if fname_out != '':
+            # Used for HyperOpt Step: find best Threshold value
+            roc_coord = np.column_stack((fpr, tpr))
+            roc_dist = [math.hypot(fpr[idx] - 0.0, tpr[idx] - 1.0) for idx in range(len(tpr))]
+            thresholds = thresholds.tolist()
+            thresholds = thresholds[::-1]
 
-        roc_coord = np.column_stack((fpr, tpr))
-        roc_dist = [math.hypot(roc_coord[i,0] - 0.0, roc_coord[i,1] - 1.0) for coord in range(roc_coord.shape[0])]
-        thresholds = list(thresholds)
-        best_treshold = thresholds[roc_dist.index(min(roc_dist))]
-        y_pred = [1 if y_pred[j,1] >= best_treshold else 0 for j in range(y_pred.shape[0])]
+            threshold = thresholds[roc_dist.index(min(roc_dist))]
+            print '\nBest Threshold: ' + str(round(threshold,3))
+            print '... with TPR=' + str(round(tpr[roc_dist.index(min(roc_dist))],3))
+            print '... and FPR=' + str(round(fpr[roc_dist.index(min(roc_dist))],3)) + '\n'
 
-        print sum(y_pred)
+        else:
+            # Used for Prediction on Testing dataset
+            plt.figure()
+            plt.plot(fpr, tpr, color='darkorange', lw=2)
+            plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.title('Roc Curve')
+            plt.savefig(self.results_path + self.model_name + '_roc.png')
+        
+        y_pred = [1 if y_pred[j,1] >= threshold else 0 for j in range(y_pred.shape[0])]
 
         stats['accuracy'] = accuracy_score(y_test, y_pred)
         stats['precision'] = precision_score(y_test, y_pred)
         stats['recall'] = recall_score(y_test, y_pred)
         stats['roc'] = roc_auc_score(y_test, y_pred)
-
-
-        plt.figure()
-        plt.plot(fpr, tpr, color='darkorange',
-                 lw=2, label='ROC curve (area = %0.2f)' % roc_auc_score(y_test, y_pred))
-        plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver operating characteristic example')
-        plt.legend(loc="lower right")
-        plt.show()
-        
 
         if 'accuracy_history' in stats:
             acc_history = (stats['accuracy'], stats['n_train'])
@@ -973,4 +993,4 @@ class Trainer():
 
         pickle.dump(stats, open(fname_out_progress, "wb"))
 
-        return y_test, y_pred
+        return y_test, y_pred, threshold
