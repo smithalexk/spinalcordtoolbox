@@ -155,7 +155,7 @@ class KerasConvNet(Sequential):
         if X.ndim == 3:
             X = np.expand_dims(X, axis=1)
         y_pred = super(KerasConvNet, self).predict(X, batch_size=self.batch_size)
-        return y_pred[:, 1]
+        return y_pred
 
     def set_params(self, params):
         if 'depth_layers_features' in params:
