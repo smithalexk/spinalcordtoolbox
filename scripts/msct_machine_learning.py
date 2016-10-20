@@ -174,12 +174,12 @@ def progress(stats):
 
     if 'n_train' in stats and 'n_test' in stats:
         s += 'Training dataset: ' + str(stats['n_train'] + stats['n_test']) + ' samples (' + str(stats['n_train_pos'] + stats['n_test_pos']) + ' positive)\n'
-        s += '... ' + str(float(stats['n_train']*100)/(stats['n_train'] + stats['n_test'])) + '%% for training HyperOpt\n'
-        s += '... ' + str(float(stats['n_test']*100)/(stats['n_train'] + stats['n_test'])) + '%% for testing HyperOpt\n'
+        s += '... ' + str(round(float(stats['n_train']*100)/(stats['n_train'] + stats['n_test']), 3)) + '%% for training HyperOpt\n'
+        s += '... ' + str(round(float(stats['n_test']*100)/(stats['n_train'] + stats['n_test']), 3)) + '%% for testing HyperOpt\n'
 
     if 'n_train' in stats:
         s += str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
-        s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(float(stats['n_train'])/stats['total_fit_time']) + ' sample/sec)\n'
+        s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(round(float(stats['n_train'])/stats['total_fit_time'],3)) + ' samples/sec)\n'
 
     if 'n_test' in stats:
         s += str(stats['n_test']) + " test samples (" + str(stats['n_test_pos']) + " positive)\n"
@@ -187,7 +187,7 @@ def progress(stats):
         s += "precision: " + str(stats['precision']) + "\n"
         s += "recall: " + str(stats['recall']) + "\n"
         s += "roc: " + str(stats['roc']) + "\n"
-        s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(float(stats['n_test'])/stats['total_fit_time']) + ' sample/sec)\n'
+        s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(round(float(stats['n_test'])/stats['total_fit_time'],3)) + ' samples/sec)\n'
 
     return s
 
@@ -498,14 +498,18 @@ class Trainer():
 
         # Dict initialization
         coord_prepared, label_prepared = {}, {}
-
         coord_label_patches_file, coord_label_patches_pos_file = [], []
-        
+
+        print '\nPrepare Patches:\n'
+        pbar = ProgressBar(widgets=[
+                Timer(),
+                ' ', Percentage(),
+                ' ', Bar(),
+                ' ', ETA()], max_value=len(fname_raw_images))
+        pbar.start()
+
         # Iteration for all INPUT fname subjects
         for i, fname in enumerate(fname_raw_images):
-
-            print fname
-
             # By default the first: fname[0]
             fname_patch = self.patches_dict_prefixe + fname[0].split('.',1)[0] + '.' + self.datasets_dict_fname.split('.',1)[1]
             with bz2.BZ2File(self.data_filemanager_path + fname_patch, 'rb') as f:
@@ -554,8 +558,11 @@ class Trainer():
             coord_prepared[str(i)] = [coord_prepared_tmp[idx] for idx in index_shuf]
             label_prepared[str(i)] = [label_prepared_tmp[idx] for idx in index_shuf]
 
-        return coord_prepared, label_prepared
+            pbar.update(i)
+        
+        pbar.finish()
 
+        return coord_prepared, label_prepared
 
     def extract_patch_feature_label_from_image(self, path_dataset, fname_raw_images, patches_coordinates, patches_labels):
         ###############################################################################################################
@@ -791,7 +798,7 @@ class Trainer():
                 return {'loss': -score, 'status': STATUS_OK, 'eval_time': stats['total_fit_time'], 'thrsh': thrsh}
 
             print '\nStarting Hyperopt...'
-            print '... with ' + str(len(coord_prepared_train)) + ' images for training'
+            print '... with ' + str(len(coord_prepared_train)-nb_subj_test) + ' images for hyper param training'
             print '... and ' + str(nb_subj_test) + ' images for hyper param evaluation\n'
             # Trials object: results report
             trials = Trials()
@@ -862,7 +869,6 @@ class Trainer():
         
         print '\nStarting Training...'
         print '... with ' + str(len(coord_train)) + ' images for training\n'
-        
         for n_epoch in range(self.param_training['number_of_epochs']):
             for i, data in enumerate(minibatch_iterator_train):
                 X_train = np.array(data['patches_feature'])
@@ -870,6 +876,7 @@ class Trainer():
 
                 stats['n_train'] += X_train.shape[0]
                 stats['n_train_pos'] += sum(y_train)
+                print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
 
                 self.model.train(X_train, y_train)
 
@@ -935,6 +942,13 @@ class Trainer():
         
         y_pred, y_test = [], []
 
+        print '\nRun Prediction:'
+        pbar = ProgressBar(widgets=[
+                Timer(),
+                ' ', Percentage(),
+                ' ', Bar(),
+                ' ', ETA()], max_value=sum([len(coord_test[str(i)]) for i in coord_test]))
+        pbar.start()
         for i, data_test in enumerate(minibatch_iterator_test):
             X_test = data_test['patches_feature']
             y_test_cur = data_test['patches_label']
@@ -945,12 +959,15 @@ class Trainer():
             y_pred.extend(y_pred_cur)
             y_test.extend(y_test_cur)
             stats['n_test'] += X_test.shape[0]
-            print str(stats['n_test'])
+            pbar.update(stats['n_test'])
             stats['n_test_pos'] += sum(y_test_cur)
+        pbar.finish()
 
         y_test = np.array(y_test)
         y_pred = np.array(y_pred)
 
+        print y_pred
+        print y_pred.shape
         fpr, tpr, thresholds = roc_curve(y_test, y_pred[:,1], pos_label=1)
         
         if fname_out != '':

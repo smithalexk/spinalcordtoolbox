@@ -67,51 +67,12 @@ class Classifier_svm(BaseEstimator):
 
         self.clf = clf
 
-        params = clf.get_params()
-        self.C = params['C']
-        self.kernel = params['kernel']
-        self.degree = params['degree']
-        self.gamma = params['gamma']
-        self.class_weight = params['class_weight']
-
-    def set_params(self, params):
-        self.clf.set_params(**params)
-        self.params = params
-
-
-class Classifier_linear_svm(BaseEstimator):
-    def __init__(self, params={'C': 1.0, 'loss': 'hinge', 'class_weight': 'None'}):
-
-        self.clf = svm.LinearSVC()
-        self.params = params
- 
-    def train(self, X, y):
-        self.clf.fit(X, y)
- 
-    def predict(self, X):
-        return self.clf.predict_proba(X)
-
-    def save(self, fname_out):
-        joblib.dump(self.clf, fname_out + '.pkl')
-
-    def load(self, fname_in):
-        clf = joblib.load(fname_in + '.pkl')
-
-        self.clf = clf
-
-        print clf.get_params()
-
         self.params = clf.get_params()
-        self.C = self.params['C']
-        self.loss = self.params['loss']
-        self.class_weight = self.params['class_weight']
+        print self.params
 
     def set_params(self, params):
         self.clf.set_params(**params)
         self.params = params
-        print self.clf.get_params()
-
-
 
 #########################################
 # USE CASE
@@ -194,7 +155,7 @@ param_training = {'data_path_local': '/Volumes/data_processing/bdeleener/machine
                     'number_of_epochs': 1, 'patch_size': [32, 32],
                     'minibatch_size_train': None, # number for CNN, None for SVM
                     'minibatch_size_test': 1000,
-                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': roc_auc_score, 'eval_factor': 1, 'ratio_eval':0.25}}
+                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':10, 'fct': recall_score, 'eval_factor': 1, 'ratio_eval':0.5}}
 
 my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     datasets_dict_fname = 'datasets.pbz2',
