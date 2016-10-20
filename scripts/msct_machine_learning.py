@@ -816,6 +816,7 @@ class Trainer():
                         stats['n_train'] += X_train.shape[0]
                         stats['n_train_pos'] += sum(y_train)
 
+                        print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
                         self.model.train(X_train, y_train)
 
                         # evaluation
