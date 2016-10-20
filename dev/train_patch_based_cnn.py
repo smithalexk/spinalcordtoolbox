@@ -139,7 +139,7 @@ class KerasConvNet(Sequential):
         self.compile(loss=self.loss, optimizer=ada)
 
     def save(self, fname_out):
-        self.save_model(fname_out + '_model.h5')
+        self.save(fname_out + '_model.h5')
         self.save_weights(fname_out + '_weights.h5')
 
     def load(self, fname_in):
