@@ -148,7 +148,8 @@ class KerasConvNet(Sequential):
         self.train_on_batch(X, y, class_weight=self.weight_class)
 
     def predict(self, X):
-        return super(KerasConvNet, self).predict(X, batch_size=self.batch_size)
+        y_pred = super(KerasConvNet, self).predict(X, batch_size=self.batch_size)
+        return y_pred[:, 1]
 
     def set_params(self, params):
         if 'depth_layers_features' in params:
@@ -178,8 +179,9 @@ def extract_list_file_from_path(path_data):
                 continue
             f_seg = None
             for fname_seg in files:
-                if fname_im[:-7] in fname_seg:
-                    f_seg = fname_seg
+                if 'seg' in fname_seg or 'gmseg' in fname_seg:
+                    if fname_im[:-7] in fname_seg:
+                        f_seg = fname_seg
             list_data.append([[fname_im], [f_seg]])
 
     return list_data
@@ -193,7 +195,7 @@ def center_of_patch_equal_one(data):
     patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
     return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
 
-
+"""
 my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/machine_learning/patch_based/large_nobrain_nopad/',
                               fct_explore_dataset=extract_list_file_from_path,
                               patch_extraction_parameters={'ratio_dataset': [0.9, 0.1],
@@ -204,14 +206,16 @@ my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/ma
                                                            'extract_all_negative': False,
                                                            'batch_size': 200},
                               fct_groundtruth_patch=center_of_patch_equal_one)
+"""
 
 # my_file_manager.extract_all_positive = True
 # training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
 # my_file_manager.explore()
 
-results_path = '/Users/chgroc/data/spine_detection/results/'
-model_path = '/Users/chgroc/data/spine_detection/model/'
-data_path = '/Users/chgroc/data/spine_detection/data/'
+results_path = '/home/neuropoly/data/result_new_pipeline_vsmall/'
+model_path = '/home/neuropoly/data/model_new_pipeline_vsmall/'
+# data_path = '/Users/chgroc/data/spine_detection/data/'
+data_filemanager_path = '/home/neuropoly/data/filemanager_vsmall_nobrain_nopad/'
 
 params_cnn = {'patch_size': [32, 32],
               'number_of_channels': 1,
@@ -226,13 +230,13 @@ cnn_model = {'model_name': 'CNN', 'model': KerasConvNet(params_cnn),
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0, 255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0, 255]}}
 
-param_training = {'number_of_epochs': 50, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
-                  'minibatch_size_train': None, 'minibatch_size_test': None,  # number for CNN, None for SVM
-                  'hyperopt': {'algo': tpe.suggest, 'nb_eval': 1000, 'fct': roc_auc_score, 'eval_factor': 1000,
-                               'ratio_eval': 0.1}}
+param_training = {'data_path_local': '/home/neuropoly/data/vsmall_nobrain_nopad/',
+                  'number_of_epochs': 50, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
+                  'minibatch_size_train': 500, 'minibatch_size_test': 500,  # number for CNN, None for SVM
+                  'hyperopt': {'algo':tpe.suggest, 'nb_eval': 10, 'fct': roc_auc_score, 'eval_factor': 100, 'ratio_eval':0.25}}
 
 ### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
-my_trainer = Trainer(data_filemanager_path=data_path,
+my_trainer = Trainer(data_filemanager_path=data_filemanager_path,
                      datasets_dict_fname='datasets.pbz2',
                      patches_dict_prefixe='patches_coordinates_',
                      patches_pos_dict_prefixe='patches_coordinates_positives_',
@@ -242,10 +246,9 @@ my_trainer = Trainer(data_filemanager_path=data_path,
                      results_path=results_path,
                      model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images)
-coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, [1, 1])
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, [1, 1])
 
-my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train, ratio_test=0.4)
-my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
-# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train, results_path + 'best_trial.pkl')
-my_trainer.run_prediction(coord_prepared_test, label_prepared_test)
+my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
+# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
+# my_trainer.predict(coord_prepared_test, label_prepared_test)
