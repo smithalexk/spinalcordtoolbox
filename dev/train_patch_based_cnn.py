@@ -146,9 +146,14 @@ class KerasConvNet(Sequential):
         self.load_weights(fname_in + '.h5')
 
     def train(self, X, y):
+        if X.ndim == 3:
+            X = np.expand_dims(X, axis=1)
+        y = np_utils.to_categorical(y, nb_classes=self.number_of_classes)
         self.train_on_batch(X, y, class_weight=self.weight_class)
 
     def predict(self, X):
+        if X.ndim == 3:
+            X = np.expand_dims(X, axis=1)
         y_pred = super(KerasConvNet, self).predict(X, batch_size=self.batch_size)
         return y_pred[:, 1]
 

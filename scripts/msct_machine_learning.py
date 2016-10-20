@@ -678,8 +678,6 @@ class Trainer():
                 minibatch = self.get_minibatch_patch_feature_label(stream_data, minibatch_size - temp_minibatch['patches_raw'].shape[0])
 
                 if minibatch['patches_raw'].shape[0] == minibatch_size:
-                    if minibatch['patches_feature'].ndim == 3:
-                        minibatch['patches_feature'] = np.expand_dims(minibatch['patches_feature'], axis=1)
                     yield minibatch
 
                 else:
@@ -695,8 +693,6 @@ class Trainer():
                         
                         if minibatch['patches_raw'].shape[0] == minibatch_size:
                             temp_minibatch = {'patches_raw': np.empty( shape=(0, 0, 0, 0) ), 'patches_feature': np.empty( shape=(0, 0) ), 'patches_label': np.empty( shape=(0,) )}
-                            if minibatch['patches_feature'].ndim == 3:
-                                minibatch['patches_feature'] = np.expand_dims(minibatch['patches_feature'], axis=1)
                             yield minibatch
                         else:
                             temp_minibatch = minibatch
