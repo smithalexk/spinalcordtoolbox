@@ -115,8 +115,6 @@ class KerasConvNet(Sequential):
         self.create_model()
 
     def create_model(self):
-        print self
-
         for d in range(len(self.number_of_layer_per_depth)):
             for l in range(len(self.number_of_layer_per_depth[d])):
                 if d == 0 and l == 0:
@@ -163,6 +161,7 @@ class KerasConvNet(Sequential):
             self.activation_function = params['activation_function']
         if 'loss' in params:
             self.loss = params['loss']
+        self.layers = []
         self.create_model()
 
 #########################################
