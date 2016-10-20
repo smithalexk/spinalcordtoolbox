@@ -173,7 +173,7 @@ def progress(stats):
     s = ''
 
     if 'n_train' in stats and 'n_test' in stats:
-        s += 'Training dataset: ' + str(stats['n_train'] + stats['n_test']) ' samples (' + str(stats['n_train_pos'] + stats['n_test_pos']) + ' positive)\n'
+        s += 'Training dataset: ' + str(stats['n_train'] + stats['n_test']) + ' samples (' + str(stats['n_train_pos'] + stats['n_test_pos']) + ' positive)\n'
         s += '... ' + str(float(stats['n_train']*100)/(stats['n_train'] + stats['n_test'])) + '%% for training HyperOpt\n'
         s += '... ' + str(float(stats['n_test']*100)/(stats['n_train'] + stats['n_test'])) + '%% for testing HyperOpt\n'
 
