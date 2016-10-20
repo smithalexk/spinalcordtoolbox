@@ -648,6 +648,9 @@ class Trainer():
         patches_raw, patches_feature, patches_label = zip(*data)
         patches_raw, patches_feature, patches_label = np.asarray(patches_raw, dtype=np.float), np.asarray(patches_feature, dtype=np.float), np.asarray(patches_label, dtype=int)
 
+        if patches_raw.ndim == 3:
+            patches_raw = np.expand_dims(patches_raw, axis=1)
+
         return {'patches_raw': patches_raw, 'patches_feature': patches_feature, 'patches_label': patches_label}
 
     def iter_minibatches_trainer(self, coord_dict_prepared, label_dict_prepared, minibatch_size, fname_dataset):
@@ -763,6 +766,7 @@ class Trainer():
                         stats['n_train'] += X_train.shape[0]
                         stats['n_train_pos'] += sum(y_train)
 
+                        print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
                         self.model.train(X_train, y_train)
 
                         # evaluation
@@ -936,6 +940,7 @@ class Trainer():
             y_pred.extend(y_pred_cur)
             y_test.extend(y_test_cur)
             stats['n_test'] += X_test.shape[0]
+            print str(stats['n_test']) + '/' + str(len(coord_test))
             stats['n_test_pos'] += sum(y_test_cur)
 
         y_test = np.array(y_test)
