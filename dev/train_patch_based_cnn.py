@@ -112,7 +112,7 @@ class KerasConvNet(Sequential):
         else:
             self.loss = 'categorical_crossentropy'
 
-        self.create_model()
+        #self.create_model()
 
     def create_model(self):
         for d in range(len(self.number_of_layer_per_depth)):
@@ -146,6 +146,7 @@ class KerasConvNet(Sequential):
         self.load_weights(fname_in + '.h5')
 
     def train(self, X, y):
+        print X.shape, y.shape
         self.train_on_batch(X, y, class_weight=self.weight_class)
 
     def predict(self, X):
@@ -161,12 +162,12 @@ class KerasConvNet(Sequential):
             self.activation_function = params['activation_function']
         if 'loss' in params:
             self.loss = params['loss']
-        self.layers = []
+        """self.layers = []
         self.outputs = []
         self.inbound_nodes = []
         self.outbound_nodes = []
         self.built = False
-        self._flattened_layers = None
+        self._flattened_layers = None"""
         self.create_model()
 
 #########################################
