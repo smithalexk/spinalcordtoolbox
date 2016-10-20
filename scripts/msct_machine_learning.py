@@ -966,8 +966,6 @@ class Trainer():
         y_test = np.array(y_test)
         y_pred = np.array(y_pred)
 
-        print y_pred
-        print y_pred.shape
         fpr, tpr, thresholds = roc_curve(y_test, y_pred[:,1], pos_label=1)
         
         if fname_out != '':
