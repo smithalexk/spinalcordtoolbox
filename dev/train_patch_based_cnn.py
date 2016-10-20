@@ -146,7 +146,6 @@ class KerasConvNet(Sequential):
         self.load_weights(fname_in + '.h5')
 
     def train(self, X, y):
-        print X.shape, y.shape
         self.train_on_batch(X, y, class_weight=self.weight_class)
 
     def predict(self, X):

@@ -625,12 +625,8 @@ class Trainer():
                     # Feature Extraction
                     patches_feature.append(self.fct_feature_extraction(patch))
 
-            print patches_raw[0].shape
-
             patches_raw = np.concatenate(patches_raw, axis=0)
             patches_feature = np.concatenate(patches_feature, axis=0)
-
-            print patches_raw.shape
 
             yield {'patches_raw': patches_raw, 'patches_feature': patches_feature, 'patches_label': label}
 
@@ -651,6 +647,9 @@ class Trainer():
 
         patches_raw, patches_feature, patches_label = zip(*data)
         patches_raw, patches_feature, patches_label = np.asarray(patches_raw, dtype=np.float), np.asarray(patches_feature, dtype=np.float), np.asarray(patches_label, dtype=int)
+
+        if patches_raw.ndim == 3:
+            patches_raw = np.expand_dims(patches_raw, axis=1)
 
         return {'patches_raw': patches_raw, 'patches_feature': patches_feature, 'patches_label': patches_label}
 
