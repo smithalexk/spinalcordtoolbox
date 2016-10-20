@@ -2,6 +2,7 @@
 #########################################################################################
 #
 # This module is used to run msct_machine_learning.py
+# run THEANO_FLAGS=mode=FAST_RUN,device=gpu1,floatX=float32 python train_patch_based_cnn.py
 #
 # ---------------------------------------------------------------------------------------
 # Copyright (c) 2016 Polytechnique Montreal <www.neuro.polymtl.ca>
@@ -26,7 +27,7 @@ from sklearn import svm
 ########## Change path
 import sys
 sys.path.insert(0, '/Users/chgroc/spinalcordtoolbox/scripts')
-from msct_machine_learning_cg import Trainer, FileManager
+from msct_machine_learning import Trainer, FileManager
 
 # TODO: Rajouter center_of_patch_equal_one dans user case
 #       Mettre a jour File Manager + fct au dessus
