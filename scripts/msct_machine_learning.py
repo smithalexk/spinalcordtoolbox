@@ -945,7 +945,7 @@ class Trainer():
             y_pred.extend(y_pred_cur)
             y_test.extend(y_test_cur)
             stats['n_test'] += X_test.shape[0]
-            print str(stats['n_test']) + '/' + str(len(coord_test))
+            print str(stats['n_test'])
             stats['n_test_pos'] += sum(y_test_cur)
 
         y_test = np.array(y_test)
