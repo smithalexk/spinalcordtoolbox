@@ -115,6 +115,7 @@ class KerasConvNet(Sequential):
         self.create_model()
 
     def create_model(self):
+        """
         for d in range(len(self.number_of_layer_per_depth)):
             for l in range(len(self.number_of_layer_per_depth[d])):
                 if d == 0 and l == 0:
@@ -126,6 +127,20 @@ class KerasConvNet(Sequential):
                 self.add(Activation(self.activation_function))
             self.add(MaxPooling2D(pool_size=(2, 2)))
             self.add(Dropout(0.25))
+        """
+        self.add(Convolution2D(32, 3, 3, border_mode='valid', input_shape=(1, self.patch_size[0], self.patch_size[1])))
+        self.add(Activation('relu'))
+        self.add(Convolution2D(32, 3, 3))
+        self.add(Activation('relu'))
+        self.add(MaxPooling2D(pool_size=(2, 2)))
+        self.add(Dropout(0.25))
+
+        self.add(Convolution2D(64, 3, 3, border_mode='valid'))
+        self.add(Activation('relu'))
+        self.add(Convolution2D(64, 3, 3))
+        self.add(Activation('relu'))
+        self.add(MaxPooling2D(pool_size=(2, 2)))
+        self.add(Dropout(0.25))
 
         self.add(Flatten())
         self.add(Dense(self.number_of_feature_dense))
