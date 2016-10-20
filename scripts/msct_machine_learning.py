@@ -179,7 +179,8 @@ def progress(stats):
 
     if 'n_train' in stats:
         s += str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
-        s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(round(float(stats['n_train'])/stats['total_fit_time'],3)) + ' samples/sec)\n'
+        if stats['total_fit_time'] != 0:
+            s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(round(float(stats['n_train'])/stats['total_fit_time'],3)) + ' samples/sec)\n'
 
     if 'n_test' in stats:
         s += str(stats['n_test']) + " test samples (" + str(stats['n_test_pos']) + " positive)\n"
@@ -187,7 +188,8 @@ def progress(stats):
         s += "precision: " + str(stats['precision']) + "\n"
         s += "recall: " + str(stats['recall']) + "\n"
         s += "roc: " + str(stats['roc']) + "\n"
-        s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(round(float(stats['n_test'])/stats['total_predict_time'],3)) + ' samples/sec)\n'
+        if stats['total_predict_time'] != 0:
+            s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(round(float(stats['n_test'])/stats['total_predict_time'],3)) + ' samples/sec)\n'
 
     return s
 
