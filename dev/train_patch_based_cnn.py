@@ -162,6 +162,11 @@ class KerasConvNet(Sequential):
         if 'loss' in params:
             self.loss = params['loss']
         self.layers = []
+        self.outputs = []
+        self.inbound_nodes = []
+        self.outbound_nodes = []
+        self.built = False
+        self._flattened_layers = None
         self.create_model()
 
 #########################################
