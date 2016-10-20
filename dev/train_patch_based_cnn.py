@@ -118,22 +118,22 @@ class KerasConvNet(Sequential):
         for d in range(len(self.number_of_layer_per_depth)):
             for l in range(len(self.number_of_layer_per_depth[d])):
                 if d == 0 and l == 0:
-                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3, border_mode='valid', input_shape=(self.number_of_channels, self.patch_size[0], self.patch_size[1])))
+                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3, border_mode='valid', input_shape=(self.number_of_channels, self.patch_size[0], self.patch_size[1])), name='input_layer')
                 elif d != 0 and l == 0:
-                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3, border_mode='valid'))
+                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3, border_mode='valid'), name='conv_'+str(d)+'_'+str(l))
                 else:
-                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3))
-                self.add(Activation(self.activation_function))
-            self.add(MaxPooling2D(pool_size=(2, 2)))
-            self.add(Dropout(0.25))
+                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3), name='conv_'+str(d)+'_'+str(l))
+                self.add(Activation(self.activation_function), name='activation_'+str(d)+'_'+str(l))
+            self.add(MaxPooling2D(pool_size=(2, 2)), name='max-pooling_'+str(d))
+            self.add(Dropout(0.25), name='dropout_'+str(d))
 
-        self.add(Flatten())
-        self.add(Dense(self.number_of_feature_dense))
-        self.add(Activation(self.activation_function))
-        self.add(Dropout(0.5))
+        self.add(Flatten(), name='flatten')
+        self.add(Dense(self.number_of_feature_dense), name='dense_before_final')
+        self.add(Activation(self.activation_function), name='activation_final')
+        self.add(Dropout(0.5), name='dropout_final')
 
-        self.add(Dense(self.number_of_classes))
-        self.add(Activation('softmax'))
+        self.add(Dense(self.number_of_classes), name='dense_final')
+        self.add(Activation('softmax'), name='softmax_activation')
 
         ada = Adadelta(lr=1.0, rho=0.95, epsilon=1e-08)
         self.compile(loss=self.loss, optimizer=ada)
