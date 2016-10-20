@@ -998,8 +998,8 @@ class Trainer():
             stats['total_predict_time'] += time.time() - tick
             y_pred.extend(y_pred_cur)
             y_test.extend(y_test_cur)
-            print X_test.shape[0]
             stats['n_test'] += X_test.shape[0]
+            print str(stats['n_test']) + '/' + len(coord_test)
             stats['n_test_pos'] += sum(y_test_cur)
 
         y_test = np.array(y_test)
