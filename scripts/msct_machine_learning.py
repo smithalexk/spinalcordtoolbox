@@ -172,9 +172,14 @@ def progress(stats):
     """Report progress information, return a string."""
     s = ''
 
+    if 'n_train' in stats and 'n_test' in stats:
+        s += 'Training dataset: ' + str(stats['n_train'] + stats['n_test']) ' samples (' + str(stats['n_train_pos'] + stats['n_test_pos']) + ' positive)\n'
+        s += '... ' + str(float(stats['n_train']*100)/(stats['n_train'] + stats['n_test'])) + '%% for training HyperOpt\n'
+        s += '... ' + str(float(stats['n_test']*100)/(stats['n_train'] + stats['n_test'])) + '%% for testing HyperOpt\n'
+
     if 'n_train' in stats:
         s += str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
-        s += 'Training time: ' + str(stats['total_fit_time']) + ' s\n'
+        s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(float(stats['n_train'])/stats['total_fit_time']) + ' sample/sec)\n'
 
     if 'n_test' in stats:
         s += str(stats['n_test']) + " test samples (" + str(stats['n_test_pos']) + " positive)\n"
@@ -182,7 +187,7 @@ def progress(stats):
         s += "precision: " + str(stats['precision']) + "\n"
         s += "recall: " + str(stats['recall']) + "\n"
         s += "roc: " + str(stats['roc']) + "\n"
-        s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s\n'
+        s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(float(stats['n_test'])/stats['total_fit_time']) + ' sample/sec)\n'
 
     return s
 
