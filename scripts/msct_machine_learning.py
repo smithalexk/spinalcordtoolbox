@@ -539,9 +539,6 @@ class Trainer():
                 for i_patch_pos in range(nb_patches_pos_to_extract):
                     coord_prepared_tmp.append(coord_label_patches_pos[i_patch_pos][0])
                     label_prepared_tmp.append(coord_label_patches_pos[i_patch_pos][1])
-            else:
-                print '\n' + fname[0] + '...'
-                print '... if a label class balance is expected: Please provide Coordinates of positive patches\n'
 
             nb_patches_tot = len(coord_label_patches)
             nb_patches_to_extract = int(ratio_patch_per_img[0] * nb_patches_tot)
@@ -765,6 +762,7 @@ class Trainer():
 
                 stats = {'n_train': 0, 'n_train_pos': 0,
                         'n_test': 0, 'n_test_pos': 0,
+                        'threshold': 0.5,
                         'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'roc': 0.0,
                         'accuracy_history': [(0, 0)], 'precision_history': [(0, 0)], 'recall_history': [(0, 0)], 'roc_history': [(0, 0)],
                         't0': time.time(), 'total_fit_time': 0.0, 'total_predict_time': 0.0}
@@ -783,6 +781,11 @@ class Trainer():
 
                         # evaluation
                         if cmpt % self.param_hyperopt['eval_factor'] == 0 and cmpt != 0:
+                            ###### To check
+                            stats['n_test'] = 0
+                            stats['n_test_pos'] = 0
+                            stats['total_predict_time'] = 0.0
+                            ######
                             self.run_prediction(coord_prepared_test_hyperopt, label_prepared_test_hyperopt, [stats['n_train'], trials.tids[-1]], stats)
                             self.model.save(self.model_path + self.model_name + '_' + str(stats['n_train']).zfill(12) + '_' + str(trials.tids[-1]).zfill(6))
                         
@@ -914,6 +917,7 @@ class Trainer():
                                                             minibatch_size_test, self.testing_dataset)
 
             stats = {'n_test': 0, 'n_test_pos': 0,
+                    'threshold': 0.5,
                     'accuracy': 0.0, 'precision': 0.0, 'recall': 0.0, 'roc': 0.0,
                     'total_predict_time': 0.0}
 
@@ -928,6 +932,7 @@ class Trainer():
             thrsh_list = [trial[i]['result']['thrsh'] for i in range(len(trial))]
             idx_best_params = loss_list.index(min(loss_list))
             threshold = trial[idx_best_params]['result']['thrsh']
+            stats['threshold'] = threshold
 
             print '\nStarting Testing...'
             print '... with ' + str(len(coord_test)) + ' images for testing'
@@ -976,6 +981,7 @@ class Trainer():
             thresholds = thresholds[::-1]
 
             threshold = thresholds[roc_dist.index(min(roc_dist))]
+            stats['threshold'] = threshold
             print '\nBest Threshold: ' + str(round(threshold,3))
             print '... with TPR=' + str(round(tpr[roc_dist.index(min(roc_dist))],3))
             print '... and FPR=' + str(round(fpr[roc_dist.index(min(roc_dist))],3)) + '\n'
