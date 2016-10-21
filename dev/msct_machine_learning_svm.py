@@ -155,7 +155,12 @@ param_training = {'data_path_local': '/Volumes/data_processing/bdeleener/machine
                     'number_of_epochs': 1, 'patch_size': [32, 32],
                     'minibatch_size_train': None, # number for CNN, None for SVM
                     'minibatch_size_test': 1000,
-                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':20, 'fct': precision_score, 'eval_factor': 1, 'ratio_eval':0.5}}
+                    'hyperopt': {'algo':tpe.suggest,        # Grid Search algorithm
+                                'nb_eval':20,               # Nb max of param test
+                                'fct': roc_auc_score,     # Objective function
+                                'eval_factor': 1,           # Evaluation rate
+                                'ratio_dataset_eval':0.5,   # Ratio of training dataset dedicated to hyperParam validation
+                                'ratio_img_eval':1.0}}      # Ratio of patch per validation image
 
 my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     datasets_dict_fname = 'datasets.pbz2',
@@ -166,9 +171,9 @@ my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     param_training=param_training, 
                     results_path=results_path, model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, [0.001, 0.001])
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, [1.0, 1.0])
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, 0.001)
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
-my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
+# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
 # my_trainer.predict(coord_prepared_test, label_prepared_test)
