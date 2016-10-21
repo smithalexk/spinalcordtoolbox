@@ -242,7 +242,7 @@ cnn_model = {'model_name': 'CNN', 'model': KerasConvNet(params_cnn),
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0, 255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0, 255]}}
 
-param_training = {'data_path_local': '/home/neuropoly/data/vsmall_nobrain_nopad/',
+param_training = {'data_path_local': '/home/neuropoly/data/large_nobrain_nopad/',
                   'number_of_epochs': 50, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
                   'minibatch_size_train': 256, 'minibatch_size_test': 256,  # number for CNN, None for SVM
                   'hyperopt': {'algo': tpe.suggest, 'nb_eval': 10, 'fct': roc_auc_score, 'eval_factor': 10000, 'ratio_dataset_eval': 0.25, 'ratio_img_eval': 0.25}}
