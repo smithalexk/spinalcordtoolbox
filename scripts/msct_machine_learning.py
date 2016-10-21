@@ -951,6 +951,9 @@ class Trainer():
                 ' ', Bar(),
                 ' ', ETA()], max_value=sum([len(coord_test[str(i)]) for i in coord_test]))
         pbar.start()
+
+        stats['n_test'] = 0
+        stats['n_test_pos'] = 0
         for i, data_test in enumerate(minibatch_iterator_test):
             X_test = data_test['patches_feature']
             y_test_cur = data_test['patches_label']
