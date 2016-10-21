@@ -155,7 +155,7 @@ param_training = {'data_path_local': '/Volumes/data_processing/bdeleener/machine
                     'number_of_epochs': 1, 'patch_size': [32, 32],
                     'minibatch_size_train': None, # number for CNN, None for SVM
                     'minibatch_size_test': 1000,
-                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':20, 'fct': recall_score, 'eval_factor': 1, 'ratio_eval':0.5}}
+                    'hyperopt': {'algo':tpe.suggest, 'nb_eval':20, 'fct': precision_score, 'eval_factor': 1, 'ratio_eval':0.5}}
 
 my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     datasets_dict_fname = 'datasets.pbz2',
