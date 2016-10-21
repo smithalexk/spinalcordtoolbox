@@ -143,6 +143,7 @@ svm_model = {'model_name': 'SVM', 'model': Classifier_svm(svm.SVC),
             'model_hyperparam':{'C': [1, 1000],
                                 'kernel': ('sigmoid', 'poly', 'rbf'),
                                 'gamma': [0, 20],
+                                'probability': True,
                                 'class_weight': (None, 'balanced')}}
 
 linear_svm_model = {'model_name': 'LinearSVM', 'model': Classifier_svm(svm.SVC),
@@ -156,8 +157,8 @@ param_training = {'data_path_local': '/Volumes/data_processing/bdeleener/machine
                     'minibatch_size_train': None, # number for CNN, None for SVM
                     'minibatch_size_test': 1000,
                     'hyperopt': {'algo':tpe.suggest,        # Grid Search algorithm
-                                'nb_eval':20,               # Nb max of param test
-                                'fct': roc_auc_score,     # Objective function
+                                'nb_eval':60,               # Nb max of param test
+                                'fct': roc_auc_score,       # Objective function
                                 'eval_factor': 1,           # Evaluation rate
                                 'ratio_dataset_eval':0.5,   # Ratio of training dataset dedicated to hyperParam validation
                                 'ratio_img_eval':1.0}}      # Ratio of patch per validation image
@@ -166,7 +167,7 @@ my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     datasets_dict_fname = 'datasets.pbz2',
                     patches_dict_prefixe = 'patches_coordinates_', 
                     patches_pos_dict_prefixe = 'patches_coordinates_positives_', 
-                    classifier_model=linear_svm_model,
+                    classifier_model=svm_model,
                     fct_feature_extraction=extract_hog_feature, 
                     param_training=param_training, 
                     results_path=results_path, model_path=model_path)
@@ -175,5 +176,5 @@ coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_train
 # coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
-# my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
+my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
 # my_trainer.predict(coord_prepared_test, label_prepared_test)
