@@ -28,11 +28,17 @@ try:
 except:
     import pickle
 
-# import keras necessary classes
-import theano
-theano.config.floatX = 'float32'
+# # import keras necessary classes
+# import theano
+# theano.config.floatX = 'float32'
 
-from keras.models import load_model
+# from keras.models import load_model
+
+from sklearn.externals import joblib
+from skimage.feature import hog
+from sklearn.svm import SVC
+from sklearn.base import BaseEstimator
+import matplotlib.pyplot as plt
 
 
 def extract_patches_from_image(image_file, patches_coordinates, patch_size=32, slice_of_interest=None, verbose=1):
@@ -55,7 +61,7 @@ def extract_patches_from_image(image_file, patches_coordinates, patch_size=32, s
         grid_voxel = np.array(image_file.transfo_phys2continuouspix(coord_physical))
         np.set_printoptions(threshold=np.inf)
         # 4. interpolate image on the grid, deal with edges
-        patch = np.reshape(image_file.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]), interpolation_mode=1), (patch_size, patch_size))
+        patch = np.reshape(image_file.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]), interpolation_mode=1, boundaries_mode='reflect'), (patch_size, patch_size))
 
         if verbose == 2:
             import matplotlib.pyplot as plt
@@ -103,22 +109,88 @@ def display_patches(patches, nb_of_subplots=None):
         plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
         plt.show()
 
+class Classifier_svm(BaseEstimator):
+    def __init__(self, params={}):
 
-def predict(fname_input, fname_model, initial_resolution, fname_output=''):
+        self.clf = SVC()
+        self.params = params
+ 
+    def train(self, X, y):
+        self.clf.fit(X, y)
+ 
+    def predict(self, X):
+        return self.clf.predict_proba(X)
+
+    def save(self, fname_out):
+        joblib.dump(self.clf, fname_out + '.pkl')
+
+    def load(self, fname_in):
+        clf = joblib.load(fname_in + '.pkl')
+
+        self.clf = clf
+
+        self.params = clf.get_params()
+        print self.params
+
+    def set_params(self, params):
+        self.clf.set_params(**params)
+        self.params = params
+
+def extract_hog_feature(patch_list, param=None):
+
+    if param is None:
+        param = {'orientations': 8, 'pixels_per_cell': [6, 6], 'cells_per_block': [3,3],
+                'visualize': False, 'transform_sqrt': True}
+
+    X_test = []
+    for patch in patch_list:
+        hog_feature = np.array(hog(image = patch, orientations=param['orientations'],
+                pixels_per_cell=param['pixels_per_cell'], cells_per_block=param['cells_per_block'],
+                transform_sqrt=param['transform_sqrt'], visualise=param['visualize']))
+        X_test.append(hog_feature)
+
+    X_test = np.array(X_test)
+
+    return X_test
+
+def plot_2D_detections(im_data, slice_number, initial_coordinates, classes_predictions):
+
+    slice_cur = im_data.data[:,:,slice_number]
+
+    fig1 = plt.figure()
+    ax1 = plt.subplot(1, 1, 1)
+    ax1.imshow(slice_cur,cmap=plt.get_cmap('gray'))
+
+    for coord_mesh in range(len(initial_coordinates)):
+        plt.scatter(initial_coordinates[coord_mesh][1], initial_coordinates[coord_mesh][0], c='Red')
+
+    for coord in classes_predictions:
+        plt.scatter(initial_coordinates[coord][1], initial_coordinates[coord][0], c='Green')
+    
+    ax1.set_axis_off()
+    plt.show()
+
+def predict(fname_input, fname_model, model, initial_resolution, list_offset, threshold, feature_fct, fname_output=''):
+    
     time_prediction = time.time()
 
     patch_size = 32
-    model = load_model(fname_model)
+
+    print 'Loading model...'
+    model.load(fname_model)
+    print '...\n'
+
     im_data = Image(fname_input)
 
     # intensity normalization
     im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
 
     nx, ny, nz, nt, px, py, pz, pt = im_data.dim
+    print 'Image Dimensions: ' + str([nx, ny, nz]) + '\n'
 
     # first round of patch prediction
-    initial_coordinates_x = range(patch_size/2, nx - patch_size/2, initial_resolution[0])
-    initial_coordinates_y = range(patch_size/2, ny - patch_size/2, initial_resolution[1])
+    initial_coordinates_x = range(0, nx, initial_resolution[0])
+    initial_coordinates_y = range(0, ny, initial_resolution[1])
     X, Y = np.meshgrid(initial_coordinates_x, initial_coordinates_y)
     X, Y = X.ravel(), Y.ravel()
     initial_coordinates = [[X[i], Y[i]] for i in range(len(X))]
@@ -127,104 +199,118 @@ def predict(fname_input, fname_model, initial_resolution, fname_output=''):
     coord_positive = SortedListWithKey(key=itemgetter(0, 1, 2))
     coord_positive_saved = []
 
-    print 'Initial prediction'
+    print threshold
+
+    print 'Initial prediction:\n'
+    tot_pos_pred = 0
     for slice_number in range(0, nz, initial_resolution[2]):
+        print '... slice #' + str(slice_number) + '/' + str(nz)
         patches = extract_patches_from_image(im_data, initial_coordinates, patch_size=patch_size, slice_of_interest=slice_number, verbose=0)
         patches = np.asarray(patches, dtype=int)
-        patches = patches.reshape(patches.shape[0], 1, patches.shape[1], patches.shape[2])
-        y_pred = model.predict(patches, batch_size=32, verbose=0)
-        classes_predictions = np.where(y_pred[:, 1] > 0.5)[0].tolist()
+        patches = patches.reshape(patches.shape[0], patches.shape[1], patches.shape[2])
 
-        """
-        patches_positive = np.squeeze(patches[np.where(y_pred == 1)[0]], axis=(1,))
-        display_patches(patches_positive, nb_of_subplots=[4, 4])
-        """
+        X_test = feature_fct(patches)
+        y_pred = model.predict(X_test)
 
+        y_pred = np.array(y_pred)
+        classes_predictions = np.where(y_pred[:, 1] > threshold)[0].tolist()
+        print '... # of pos prediction: ' + str(len(classes_predictions)) + '\n'
+        tot_pos_pred += len(classes_predictions)
+
+        # plot_2D_detections(im_data, slice_number, initial_coordinates, classes_predictions)
+        
         coord_positive.update([[initial_coordinates[coord][0], initial_coordinates[coord][1], slice_number] for coord in classes_predictions])
         coord_positive_saved.extend([[initial_coordinates[coord][0], initial_coordinates[coord][1], slice_number, y_pred[coord, 1]] for coord in classes_predictions])
+        
         nb_voxels_explored += len(patches)
+    
+    print 'Total # of voxels explored: ' + str(nb_voxels_explored)
+    print '# of pos predicted voxels: ' + str(tot_pos_pred) + ' (' + str(round(float(tot_pos_pred*initial_resolution[2])/nz,3)) + ' pos pred per slice)'
     last_coord_positive = coord_positive
-
-    # data preparation
-    list_offset = [[xv, yv, zv] for xv in [-1, 0, 1] for yv in [-1, 0, 1] for zv in [-3, -2, -1, 0, 1, 2, 3] if [xv, yv, zv] != [0, 0, 0]]
 
     # informative data
     iteration = 1
 
-    print '\nIterative prediction based on mathematical morphology'
-    while len(last_coord_positive) != 0:
-        print '\nIteration #' + str(iteration) + '. Number of positive voxel to explore:' + str(len(last_coord_positive))
-        current_coordinates = SortedListWithKey(key=itemgetter(0, 1, 2))
-        for coord in last_coord_positive:
-            for offset in list_offset:
-                new_coord = [coord[0] + offset[0], coord[1] + offset[1], coord[2] + offset[2]]
-                if 0 <= new_coord[0] < im_data.data.shape[0] and 0 <= new_coord[1] < im_data.data.shape[1] and 0 <= new_coord[2] < im_data.data.shape[2]:
-                    if current_coordinates.count(new_coord) == 0:
-                        if coord_positive.count(new_coord) == 0:
-                            current_coordinates.add(new_coord)
+    # print '\nIterative prediction based on mathematical morphology'
+    # while len(last_coord_positive) != 0:
+    #     print '\nIteration #' + str(iteration) + '. Number of positive voxel to explore:' + str(len(last_coord_positive))
+    #     current_coordinates = SortedListWithKey(key=itemgetter(0, 1, 2))
+    #     for coord in last_coord_positive:
+    #         for offset in list_offset:
+    #             new_coord = [coord[0] + offset[0], coord[1] + offset[1], coord[2] + offset[2]]
+    #             if 0 <= new_coord[0] < im_data.data.shape[0] and 0 <= new_coord[1] < im_data.data.shape[1] and 0 <= new_coord[2] < im_data.data.shape[2]:
+    #                 if current_coordinates.count(new_coord) == 0:
+    #                     if coord_positive.count(new_coord) == 0:
+    #                         current_coordinates.add(new_coord)
 
-        print 'Patch extraction (N=' + str(len(current_coordinates)) + ')'
-        patches = extract_patches_from_image(im_data, current_coordinates, patch_size=patch_size, verbose=0)
-        #display_patches(patches, nb_of_subplots=[10, 10])
-        if patches is not None:
-            patches = np.asarray(patches, dtype=int)
-            patches = patches.reshape(patches.shape[0], 1, patches.shape[1], patches.shape[2])
-            y_pred = model.predict(patches, batch_size=32, verbose=1)
-            classes_predictions = np.where(y_pred[:, 1] > 0.5)[0].tolist()
+    #     print 'Patch extraction (N=' + str(len(current_coordinates)) + ')'
+    #     patches = extract_patches_from_image(im_data, current_coordinates, patch_size=patch_size, verbose=0)
+    #     #display_patches(patches, nb_of_subplots=[10, 10])
+    #     if patches is not None:
+    #         patches = np.asarray(patches, dtype=int)
+    #         patches = patches.reshape(patches.shape[0], 1, patches.shape[1], patches.shape[2])
+    #         y_pred = model.predict(patches, batch_size=32, verbose=1)
+    #         classes_predictions = np.where(y_pred[:, 1] > 0.5)[0].tolist()
 
-            """
-            patches_positive = np.squeeze(patches[np.where(y_pred == 1)[0]], axis=(1,))
-            display_patches(patches_positive, nb_of_subplots=[10, 10])
-            """
+    #         """
+    #         patches_positive = np.squeeze(patches[np.where(y_pred == 1)[0]], axis=(1,))
+    #         display_patches(patches_positive, nb_of_subplots=[10, 10])
+    #         """
 
-            last_coord_positive = [[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2]] for coord in classes_predictions]
-            coord_positive.update(last_coord_positive)
-            coord_positive_saved.extend([[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2], y_pred[coord, 1]] for coord in classes_predictions])
-            nb_voxels_explored += len(patches)
-        else:
-            last_coord_positive = []
+    #         last_coord_positive = [[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2]] for coord in classes_predictions]
+    #         coord_positive.update(last_coord_positive)
+    #         coord_positive_saved.extend([[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2], y_pred[coord, 1]] for coord in classes_predictions])
+    #         nb_voxels_explored += len(patches)
+    #     else:
+    #         last_coord_positive = []
 
-        iteration += 1
+    #     iteration += 1
 
-    nb_voxels_image = nx * ny * nz
-    print '\nNumber of voxels explored = ' + str(nb_voxels_explored) + '/' + str(nb_voxels_image) + ' (' + str(round(100.0 * nb_voxels_explored / nb_voxels_image, 2)) + '%)'
+    # nb_voxels_image = nx * ny * nz
+    # print '\nNumber of voxels explored = ' + str(nb_voxels_explored) + '/' + str(nb_voxels_image) + ' (' + str(round(100.0 * nb_voxels_explored / nb_voxels_image, 2)) + '%)'
 
-    # write results
-    print '\nWriting results'
-    input_image = im_data.copy()
-    input_image.data *= 0
-    for coord in coord_positive_saved:
-        print coord
-        input_image.data[coord[0], coord[1], coord[2]] = coord[3]
-    path_input, file_input, ext_input = sct.extract_fname(fname_input)
-    fname_output_temp = path_input + "tmp." + file_input + "_cord_prediction" + ext_input
-    input_image.setFileName(fname_output_temp)
-    input_image.save()
+    # # write results
+    # print '\nWriting results'
+    # input_image = im_data.copy()
+    # input_image.data *= 0
+    # for coord in coord_positive_saved:
+    #     # print coord
+    #     input_image.data[coord[0], coord[1], coord[2]] = coord[3]
+    # # path_input, file_input, ext_input = sct.extract_fname(fname_input)
+    # # fname_output_temp = path_input + "tmp." + file_input + "_cord_prediction" + ext_input
+    # # input_image.setFileName(fname_output_temp)
+    # input_image.setFileName(fname_output)
+    # input_image.save()
+    # print fname_input
 
-    from scipy.ndimage import binary_opening, binary_closing, label
-    input_image.data = binary_closing(input_image.data, structure=np.ones((2, 2, 1))).astype(np.int)
-    input_image.data = binary_opening(input_image.data, structure=np.ones((2, 2, 1))).astype(np.int)
-    blobs, number_of_blobs = label(input_image.data)
-    size = np.bincount(blobs.ravel())
-    biggest_label = size[1:].argmax() + 1
-    input_image.data *= 0
-    input_image.data[blobs == biggest_label] = 1
 
-    from sct_straighten_spinalcord import smooth_centerline
-    x_centerline_fit, y_centerline_fit, z_centerline, x_centerline_deriv, y_centerline_deriv, z_centerline_deriv = smooth_centerline(input_image, algo_fitting='nurbs', verbose=1, nurbs_pts_number=3000, all_slices=False, phys_coordinates=False, remove_outliers=False)
 
-    input_image.data *= 0
-    for i in range(0, len(z_centerline), 1):
-        input_image.data[int(round(x_centerline_fit[i])), int(round(y_centerline_fit[i])), int(round(z_centerline[i]))] = 1
 
-    if fname_output == '':
-        path_input, file_input, ext_input = sct.extract_fname(fname_input)
-        fname_output = file_input + "_cord_prediction" + ext_input
-    input_image.setFileName(fname_output)
-    input_image.save()
 
-    time_prediction = time.time() - time_prediction
-    sct.printv('Time to predict cord location: ' + str(np.round(time_prediction)) + ' seconds', 1)
+    # from scipy.ndimage import binary_opening, binary_closing, label
+    # input_image.data = binary_closing(input_image.data, structure=np.ones((2, 2, 1))).astype(np.int)
+    # input_image.data = binary_opening(input_image.data, structure=np.ones((2, 2, 1))).astype(np.int)
+    # blobs, number_of_blobs = label(input_image.data)
+    # size = np.bincount(blobs.ravel())
+    # biggest_label = size[1:].argmax() + 1
+    # input_image.data *= 0
+    # input_image.data[blobs == biggest_label] = 1
+
+    # from sct_straighten_spinalcord import smooth_centerline
+    # x_centerline_fit, y_centerline_fit, z_centerline, x_centerline_deriv, y_centerline_deriv, z_centerline_deriv = smooth_centerline(input_image, algo_fitting='nurbs', verbose=1, nurbs_pts_number=3000, all_slices=False, phys_coordinates=False, remove_outliers=False)
+
+    # input_image.data *= 0
+    # for i in range(0, len(z_centerline), 1):
+    #     input_image.data[int(round(x_centerline_fit[i])), int(round(y_centerline_fit[i])), int(round(z_centerline[i]))] = 1
+
+    # if fname_output == '':
+    #     path_input, file_input, ext_input = sct.extract_fname(fname_input)
+    #     fname_output = file_input + "_cord_prediction" + ext_input
+    # input_image.setFileName(fname_output)
+    # input_image.save()
+
+    # time_prediction = time.time() - time_prediction
+    # sct.printv('Time to predict cord location: ' + str(np.round(time_prediction)) + ' seconds', 1)
 
 
 def get_parser():
@@ -282,9 +368,26 @@ if __name__ == "__main__":
 
     #fname_model = '/Users/benjamindeleener/data/machine_learning/results_detection/2016-08-16_nopad_HCandCSM/model_cnn_it240000.h5'
     #fname_model = '/Users/benjamindeleener/data/machine_learning/results_detection/2016-08-17_HCandCSM_4conv/model_cnn_it530000.h5'
-    fname_model = '/Users/benjamindeleener/data/machine_learning/results_detection/2016-09-19_large_dataset/experiment2/model_cnn_it240000.h5'
+    # fname_model = '/Users/benjamindeleener/data/machine_learning/results_detection/2016-09-19_large_dataset/experiment2/model_cnn_it240000.h5'
     #fname_model = '/Users/benjamindeleener/data/machine_learning/results_detection/2016-09-19_large_dataset/experiment2/model_cnn_it1260000.h5'
+    fname_model = '/Users/chgroc/data/spine_detection/model_0-001_0-5_recall/LinearSVM_train'
+    model_svm = Classifier_svm()
+
+    # Find threshold value from training
+    fname_trial = '/Users/chgroc/data/spine_detection/results_0-001_0-5_recall/LinearSVM_trials.pkl'
+    with open(fname_trial) as outfile:    
+        trial = pickle.load(outfile)
+        outfile.close()
+    loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
+    thrsh_list = [trial[i]['result']['thrsh'] for i in range(len(trial))]
+    idx_best_params = loss_list.index(min(loss_list))
+    threshold = trial[idx_best_params]['result']['thrsh']
+
+    feature_fct = extract_hog_feature
+
     initial_resolution = [5, 5, 10]
+    list_offset = [[xv, yv, zv] for xv in [-1, 0, 1] for yv in [-1, 0, 1] for zv in [-3, -2, -1, 0, 1, 2, 3] if [xv, yv, zv] != [0, 0, 0]]
+
 
     fname_input = arguments['-i']
 
@@ -292,4 +395,5 @@ if __name__ == "__main__":
     if '-o' in arguments:
         fname_output = arguments['-o']
 
-    predict(fname_input, fname_model, initial_resolution, fname_output=fname_output)
+    predict(fname_input, fname_model, model_svm, initial_resolution, list_offset, 
+                threshold = threshold, feature_fct = feature_fct, fname_output = fname_output)
