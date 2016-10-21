@@ -179,7 +179,8 @@ def progress(stats):
 
     if 'n_train' in stats:
         s += str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
-        s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(round(float(stats['n_train'])/stats['total_fit_time'],3)) + ' samples/sec)\n'
+        if stats['total_fit_time'] != 0:
+            s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(round(float(stats['n_train'])/stats['total_fit_time'],3)) + ' samples/sec)\n'
 
     if 'n_test' in stats:
         s += str(stats['n_test']) + " test samples (" + str(stats['n_test_pos']) + " positive)\n"
@@ -187,7 +188,8 @@ def progress(stats):
         s += "precision: " + str(stats['precision']) + "\n"
         s += "recall: " + str(stats['recall']) + "\n"
         s += "roc: " + str(stats['roc']) + "\n"
-        s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(round(float(stats['n_test'])/stats['total_predict_time'],3)) + ' samples/sec)\n'
+        if stats['total_predict_time'] != 0:
+            s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(round(float(stats['n_test'])/stats['total_predict_time'],3)) + ' samples/sec)\n'
 
     return s
 
@@ -954,6 +956,8 @@ class Trainer():
                 ' ', Bar(),
                 ' ', ETA()], max_value=sum([len(coord_test[str(i)]) for i in coord_test]))
         pbar.start()
+
+        cmpt = 0
         for i, data_test in enumerate(minibatch_iterator_test):
             X_test = data_test['patches_feature']
             y_test_cur = data_test['patches_label']
@@ -963,13 +967,15 @@ class Trainer():
             stats['total_predict_time'] += time.time() - tick
             y_pred.extend(y_pred_cur)
             y_test.extend(y_test_cur)
+            cmpt += X_test.shape[0]
             stats['n_test'] += X_test.shape[0]
-            pbar.update(stats['n_test'])
+            pbar.update(cmpt)
             stats['n_test_pos'] += sum(y_test_cur)
         pbar.finish()
 
         y_test = np.array(y_test)
         y_pred = np.array(y_pred)
+        print y_pred.shape
 
         fpr, tpr, thresholds = roc_curve(y_test, y_pred[:,1], pos_label=1)
         
