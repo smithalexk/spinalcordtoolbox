@@ -224,10 +224,10 @@ my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/ma
 # training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
 # my_file_manager.explore()
 
-results_path = '/home/neuropoly/data/result_new_pipeline_vsmall/'
-model_path = '/home/neuropoly/data/model_new_pipeline_vsmall/'
+results_path = '/home/neuropoly/data/result_new_pipeline_large/'
+model_path = '/home/neuropoly/data/model_new_pipeline_large/'
 # data_path = '/Users/chgroc/data/spine_detection/data/'
-data_filemanager_path = '/home/neuropoly/data/filemanager_vsmall_nobrain_nopad/'
+data_filemanager_path = '/home/neuropoly/data/filemanager_large_nobrain_nopad/'
 
 params_cnn = {'patch_size': [32, 32],
               'number_of_channels': 1,
