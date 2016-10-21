@@ -57,7 +57,14 @@ def center_of_patch_equal_one(data):
     patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
     return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
 
-my_file_manager = FileManager(dataset_path='/Volumes/data_processing/bdeleener/machinelearning/data_t2s/',
+path_data = '/Users/benjamindeleener/data/data_augmentation/data_t2s/'
+#path_data = '/Volumes/data_processing/bdeleener/machinelearning/data_t2s/'
+
+path_output = '/Users/benjamindeleener/data/data_augmentation/filemanager_t2s/'
+#path_output = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s/'
+
+
+my_file_manager = FileManager(dataset_path=path_data,
                               fct_explore_dataset=extract_list_file_from_path,
                               patch_extraction_parameters={'ratio_dataset': [0.9, 0.1],
                                                            'ratio_patches_voxels': 0.1,
@@ -67,7 +74,7 @@ my_file_manager = FileManager(dataset_path='/Volumes/data_processing/bdeleener/m
                                                            'extract_all_negative': False,
                                                            'batch_size': 200},
                               fct_groundtruth_patch=center_of_patch_equal_one,
-                              path_output='/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s/')
+                              path_output=path_output)
 
 training_dataset, testing_dataset = my_file_manager.decompose_dataset()
 my_file_manager.explore()
