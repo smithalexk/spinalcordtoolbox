@@ -245,7 +245,7 @@ methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'ra
 param_training = {'data_path_local': '/home/neuropoly/data/vsmall_nobrain_nopad/',
                   'number_of_epochs': 50, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
                   'minibatch_size_train': 256, 'minibatch_size_test': 256,  # number for CNN, None for SVM
-                  'hyperopt': {'algo': tpe.suggest, 'nb_eval': 10, 'fct': roc_auc_score, 'eval_factor': 10000, 'ratio_eval': 0.1}}
+                  'hyperopt': {'algo': tpe.suggest, 'nb_eval': 10, 'fct': roc_auc_score, 'eval_factor': 10000, 'ratio_dataset_eval': 0.25, 'ratio_img_eval': 0.25}}
 
 ### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
 my_trainer = Trainer(data_filemanager_path=data_filemanager_path,
