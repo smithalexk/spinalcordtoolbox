@@ -224,10 +224,10 @@ my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/ma
 # training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
 # my_file_manager.explore()
 
-results_path = '/home/neuropoly/data/result_new_pipeline_vsmall/'
-model_path = '/home/neuropoly/data/model_new_pipeline_vsmall/'
+results_path = '/home/neuropoly/data/result_new_pipeline_large/'
+model_path = '/home/neuropoly/data/model_new_pipeline_large/'
 # data_path = '/Users/chgroc/data/spine_detection/data/'
-data_filemanager_path = '/home/neuropoly/data/filemanager_vsmall_nobrain_nopad/'
+data_filemanager_path = '/home/neuropoly/data/filemanager_large_nobrain_nopad/'
 
 params_cnn = {'patch_size': [32, 32],
               'number_of_channels': 1,
@@ -242,10 +242,10 @@ cnn_model = {'model_name': 'CNN', 'model': KerasConvNet(params_cnn),
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0, 255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0, 255]}}
 
-param_training = {'data_path_local': '/home/neuropoly/data/vsmall_nobrain_nopad/',
+param_training = {'data_path_local': '/home/neuropoly/data/large_nobrain_nopad/',
                   'number_of_epochs': 50, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
                   'minibatch_size_train': 256, 'minibatch_size_test': 256,  # number for CNN, None for SVM
-                  'hyperopt': {'algo': tpe.suggest, 'nb_eval': 10, 'fct': roc_auc_score, 'eval_factor': 10000, 'ratio_eval': 0.1}}
+                  'hyperopt': {'algo': tpe.suggest, 'nb_eval': 10, 'fct': roc_auc_score, 'eval_factor': 10000, 'ratio_dataset_eval': 0.25, 'ratio_img_eval': 0.25}}
 
 ### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
 my_trainer = Trainer(data_filemanager_path=data_filemanager_path,
@@ -258,8 +258,8 @@ my_trainer = Trainer(data_filemanager_path=data_filemanager_path,
                      results_path=results_path,
                      model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, [1, 1])
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, [1, 1])
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, 1.0)
+# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
 # my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)

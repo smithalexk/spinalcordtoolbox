@@ -34,49 +34,64 @@ rcParams['legend.fontsize'] = 10
 
 def plot_training_keras_results(fname_in):
 
-  clf_stats = pickle.load(open(fname_in, "rb"))
+    clf_stats = pickle.load(open(fname_in, "rb"))
 
-  def plot_result(x, y, x_legend, text):
-    """Plot result as a function of x."""
-    x = np.array(x)
-    y = np.array(y)
-    plt.title('Classification ' + text + ' as a function of %s' % x_legend)
-    plt.xlabel('%s' % x_legend)
-    plt.ylabel(text)
-    plt.grid(True)
-    plt.plot(x, y)
+    def plot_result(x, y, x_legend, text):
+        """Plot result as a function of x."""
+        x = np.array(x)
+        y = np.array(y)
+        plt.title('Classification ' + text + ' as a function of %s' % x_legend)
+        plt.xlabel('%s' % x_legend)
+        plt.ylabel(text)
+        plt.grid(True)
+        plt.plot(x, y)
 
-  # Plot evolution
-  plt.figure()
-  plt.subplot(2, 2, 1)
-  accuracy, n_examples = map(list, zip(*clf_stats['accuracy_history']))
-  plot_result(n_examples, accuracy, "training examples (#)", 'accuracy')
-  ax = plt.gca()
-  ax.set_ylim((0, 1))
+    # Plot evolution
+    plt.figure()
+    plt.subplot(2, 2, 1)
+    accuracy, n_examples = map(list, zip(*clf_stats['accuracy_history']))
+    plot_result(n_examples, accuracy, "training examples (#)", 'accuracy')
+    ax = plt.gca()
+    ax.set_ylim((0, 1))
 
-  plt.subplot(2, 2, 2)
-  precision, n_examples = map(list, zip(*clf_stats['precision_history']))
-  plot_result(n_examples, precision, "training examples (#)", 'precision')
-  ax = plt.gca()
-  ax.set_ylim((0, 1))
+    plt.subplot(2, 2, 2)
+    precision, n_examples = map(list, zip(*clf_stats['precision_history']))
+    plot_result(n_examples, precision, "training examples (#)", 'precision')
+    ax = plt.gca()
+    ax.set_ylim((0, 1))
 
-  plt.subplot(2, 2, 3)
-  recall, n_examples = map(list, zip(*clf_stats['recall_history']))
-  plot_result(n_examples, recall, "training examples (#)", 'recall')
-  ax = plt.gca()
-  ax.set_ylim((0, 1))
+    plt.subplot(2, 2, 3)
+    recall, n_examples = map(list, zip(*clf_stats['recall_history']))
+    plot_result(n_examples, recall, "training examples (#)", 'recall')
+    ax = plt.gca()
+    ax.set_ylim((0, 1))
 
-  plt.subplot(2, 2, 4)
-  fscore, n_examples = map(list, zip(*clf_stats['roc_history']))
-  plot_result(n_examples, fscore, "training examples (#)", 'roc_auc')
-  ax = plt.gca()
-  ax.set_ylim((0, 1))
+    plt.subplot(2, 2, 4)
+    roc_auc, n_examples = map(list, zip(*clf_stats['roc_history']))
+    plot_result(n_examples, roc_auc, "training examples (#)", 'roc_auc')
+    ax = plt.gca()
+    ax.set_ylim((0, 1))
 
-  plt.show()
+    plt.show()
+
+    # find best result
+    best_roc = np.max(roc_auc)
+    index_best_roc = np.argmax(roc_auc)
+    training_nb = n_examples[index_best_roc]
+    best_accuracy = accuracy[index_best_roc]
+    best_precision = precision[index_best_roc]
+    best_recall = recall[index_best_roc]
+
+    print 'Number of training samples = ', training_nb
+    print 'Accuracy = ', best_accuracy
+    print 'Precision = ', best_precision
+    print 'Recall = ', best_recall
+    print 'ROC AUC = ', best_roc
+
 
 def plot_param_stats(fname_trial, param_dict):
 
-  with open(fname_trial) as outfile:    
+  with open(fname_trial) as outfile:
     trial = pickle.load(outfile)
     outfile.close()
 
@@ -115,7 +130,7 @@ def plot_param_stats(fname_trial, param_dict):
       plt.xticks(range(len(param_dict[param])), list(param_dict[param]))
     ax3.grid()
 
-    ax4 = plt.subplot(2, 2, 4)    
+    ax4 = plt.subplot(2, 2, 4)
     ax4.scatter(param_vals, trsh_vals, s=20, linewidth=0.01, alpha=0.75)
     ax4.set_xlabel(param, fontsize=16)
     ax4.set_ylabel('Threshold', fontsize=16)
@@ -130,6 +145,7 @@ model_hyperparam = {'C': [1, 1000],
                     'probability': True,
                     'class_weight': (None, 'balanced')}
 
-fname_trial = '/Users/chgroc/data/spine_detection/results_0-001_0-5_recall/LinearSVM_trials.pkl'
+fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/CNN_eval_5120256_000000000000.pkl'
 
-plot_param_stats(fname_trial, model_hyperparam)
+#plot_param_stats(fname_trial, model_hyperparam)
+plot_training_keras_results(fname_trial)
