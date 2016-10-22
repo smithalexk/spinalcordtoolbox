@@ -57,10 +57,12 @@ def center_of_patch_equal_one(data):
     patch_size_x, patch_size_y = data['patches_gold'].shape[2], data['patches_gold'].shape[3]
     return np.squeeze(data['patches_gold'][:, 0, int(patch_size_x / 2), int(patch_size_y / 2)])
 
-path_data = '/Users/benjamindeleener/data/data_augmentation/data_t2s/'
+path_data = '/Users/neuropoly/data/data_t1/'
+#path_data = '/Users/benjamindeleener/data/data_augmentation/data_t2s/'
 #path_data = '/Volumes/data_processing/bdeleener/machinelearning/data_t2s/'
 
-path_output = '/Users/benjamindeleener/data/data_augmentation/filemanager_t2s/'
+path_output = '/Users/neuropoly/data/filemanager_t1/'
+#path_output = '/Users/benjamindeleener/data/data_augmentation/filemanager_t2s/'
 #path_output = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s/'
 
 
