@@ -347,6 +347,7 @@ class FileManager(object):
         if self.extract_all_positive:
             for i in range(len(self.training_dataset)):
                 fname_gold_image = self.training_dataset[i][1][0]  # first gold image is the reference
+                print i, '/', len(self.training_dataset), fname_gold_image
                 im_gold = Image(self.dataset_path + fname_gold_image)
                 coordinates_positive = np.where(im_gold.data == 1)
                 coordinates_positive = np.asarray([[coordinates_positive[0][j], coordinates_positive[1][j], coordinates_positive[2][j]] for j in range(len(coordinates_positive[0]))])
@@ -360,6 +361,10 @@ class FileManager(object):
                 with bz2.BZ2File(self.path_output + 'patches_coordinates_positives_' + file_fname + '.pbz2', 'w') as f:
                     pickle.dump(results_positive, f)
 
+            print 'Finished extracting positive patches'
+            
+        print 'Starting processing images on', self.cpu_number, 'cores'
+                    
         # TRAINING DATASET
         classes_training = {}
 
