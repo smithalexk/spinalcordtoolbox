@@ -12,6 +12,7 @@
 #########################################################################################
 
 import os
+import sys
 import sct_utils as sct
 from msct_image import Image
 import numpy as np
@@ -283,11 +284,11 @@ class FileManager(object):
 
         x, y, z = np.mgrid[0:image_dim[0], 0:image_dim[1], 0:image_dim[2]]
         indexes = np.array(zip(x.ravel(), y.ravel(), z.ravel()))
-        physical_coordinates = np.asarray(image.transfo_pix2phys(indexes))
 
-        random_batch = np.random.choice(physical_coordinates.shape[0], int(round(physical_coordinates.shape[0] * self.ratio_patches_voxels)))
+        random_batch = np.random.choice(indexes.shape[0], int(round(indexes.shape[0] * self.ratio_patches_voxels)))
 
-        return physical_coordinates[random_batch]
+        physical_coordinates = np.asarray(image.transfo_pix2phys(indexes[random_batch]))
+        return physical_coordinates
 
     def worker_explore(self, arguments_worker):
         try:
@@ -298,6 +299,7 @@ class FileManager(object):
             fname_gold_images = dataset[i][1]
             reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
 
+            print 'Starting computing patches on ' + self.dataset_path + fname_raw_images[0]
             patches_coordinates = self.compute_patches_coordinates(reference_image)
             print 'Number of patches in ' + fname_raw_images[0] + ' = ' + str(patches_coordinates.shape[0])
 
@@ -340,6 +342,7 @@ class FileManager(object):
             return
 
         except Exception as e:
+            import sys
             print 'Error on line {}'.format(sys.exc_info()[-1].tb_lineno)
             raise e
 
@@ -368,7 +371,7 @@ class FileManager(object):
         # TRAINING DATASET
         classes_training = {}
 
-        pool = mp.Pool(processes=self.cpu_number)
+        pool = mp.Pool(processes=self.cpu_number, maxtasksperchild=1)
         results = pool.map(self.worker_explore, itertools.izip(range(len(self.training_dataset)), itertools.repeat(self.training_dataset)))
 
         pool.close()
@@ -403,7 +406,7 @@ class FileManager(object):
         # TESTING DATASET
         classes_testing = {}
 
-        pool = mp.Pool(processes=self.cpu_number)
+        pool = mp.Pool(processes=self.cpu_number, maxtasksperchild=1)
         results = pool.map(self.worker_explore, itertools.izip(range(len(self.testing_dataset)), itertools.repeat(self.testing_dataset)))
 
         pool.close()
