@@ -795,6 +795,7 @@ class Trainer():
                         stats['n_train_pos'] += sum(y_train)
 
                         if stats['n_train'] <= limit_begin:
+                            print stats['n_train']
                             continue
 
                         print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
