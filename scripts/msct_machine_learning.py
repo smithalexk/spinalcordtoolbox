@@ -718,12 +718,6 @@ class Trainer():
         # hyperparam dict must be provided
         if self.model_hyperparam is not None:
             nb_subj_test = int(len(coord_prepared_train) * self.param_hyperopt['ratio_dataset_eval']) # Nb subjects used for hyperopt testing
-            nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
-            
-            if self.param_training['minibatch_size_train'] is not None:
-                train_minibatch_size = self.param_training['minibatch_size_train']
-            else:
-                train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
 
             # Split coord_prepared_train and label_prepared_train for hyperopt training and testing
             cmpt = 0
@@ -735,10 +729,17 @@ class Trainer():
                     coord_prepared_test_hyperopt[str(i)] = coord_prepared_train[str(i)][:nb_to_extract]
                     label_prepared_test_hyperopt[str(i)] = label_prepared_train[str(i)][:nb_to_extract]
                 else:
-                    coord_prepared_train_hyperopt[str(i)] = coord_prepared_train[str(i)]
-                    label_prepared_train_hyperopt[str(i)] = label_prepared_train[str(i)]
+                    nb_to_extract = int(len(coord_prepared_train[str(i)]) * self.param_hyperopt['ratio_img_train'])
+                    coord_prepared_train_hyperopt[str(i)] = coord_prepared_train[str(i)][:nb_to_extract]
+                    label_prepared_train_hyperopt[str(i)] = label_prepared_train[str(i)][:nb_to_extract]
                 cmpt += 1
             
+            nb_patch_all_train_subj = [len(coord_prepared_train_hyperopt[str(i)]) for i in coord_prepared_train_hyperopt] # List nb patches available for each subj in all training dataset
+            if self.param_training['minibatch_size_train'] is not None:
+                train_minibatch_size = self.param_training['minibatch_size_train']
+            else:
+                train_minibatch_size = sum(nb_patch_all_train_subj[nb_subj_test:]) # Define minibatch size used for hyperopt training
+
             # Create hyperopt dict compatible with hyperopt Lib
             model_hyperparam_hyperopt = {}                             
             for param in self.model_hyperparam:
@@ -778,6 +779,7 @@ class Trainer():
 
                         stats['n_train'] += X_train.shape[0]
                         stats['n_train_pos'] += sum(y_train)
+                        print X_train.shape[0]
 
                         print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
                         self.model.train(X_train, y_train)
