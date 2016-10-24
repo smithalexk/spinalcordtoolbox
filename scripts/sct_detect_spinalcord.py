@@ -40,7 +40,8 @@ from sklearn.svm import SVC
 from sklearn.base import BaseEstimator
 import matplotlib.pyplot as plt
 from scipy.sparse.csgraph import shortest_path
-
+from sct_straighten_spinalcord import smooth_centerline
+from scipy.spatial import distance
 
 def extract_patches_from_image(image_file, patches_coordinates, patch_size=32, slice_of_interest=None, verbose=1):
     result = []
@@ -135,6 +136,7 @@ class Classifier_svm(BaseEstimator):
 
     def set_params(self, params):
         self.clf.set_params(**params)
+        print self.clf.get_params()
         self.params = params
 
 def extract_hog_feature(patch_list, param=None):
@@ -171,20 +173,71 @@ def plot_2D_detections(im_data, slice_number, initial_coordinates, classes_predi
     ax1.set_axis_off()
     plt.show()
 
-def predict(fname_input, fname_model, model, initial_resolution, list_offset, threshold, feature_fct, path_output, verbose=0):
+
+def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, idx_2_process, list_offset, path_output, verbose=0):
+
+    coord_positive = SortedListWithKey(key=itemgetter(0, 1, 2))
+    coord_positive.update(coord_positive_saved)
+    last_coord_positive = coord_positive
+
+    # informative data
+    iteration = 1
+
+    print '\nIterative prediction based on mathematical morphology'
+    while len(last_coord_positive) != 0:
+        print '\nIteration #' + str(iteration) + '. # of positive voxel to explore:' + str(len(last_coord_positive))
+        current_coordinates = SortedListWithKey(key=itemgetter(0, 1, 2))
+        for coord in last_coord_positive:
+            for offset in list_offset:
+                new_coord = [coord[0] + offset[0], coord[1] + offset[1], coord[2] + offset[2]]
+                if new_coord[2] in idx_2_process:
+                    if 0 <= new_coord[0] < im_data.data.shape[0] and 0 <= new_coord[1] < im_data.data.shape[1] and 0 <= new_coord[2] < im_data.data.shape[2]:
+                        if current_coordinates.count(new_coord) == 0:
+                            if coord_positive.count(new_coord) == 0:
+                                current_coordinates.add(new_coord)
+
+        print 'Patch extraction (N=' + str(len(current_coordinates)) + ')'
+
+        patches = extract_patches_from_image(im_data, current_coordinates, patch_size=patch_size, verbose=0)
+        
+        if patches is not None:
+            patches = np.asarray(patches, dtype=int)
+            patches = patches.reshape(patches.shape[0], patches.shape[1], patches.shape[2])
+
+            X_test = feature_fct(patches)
+            y_pred = model.predict(X_test)
+
+            y_pred = np.array(y_pred)
+            classes_predictions = np.where(y_pred[:, 1] > threshold)[0].tolist()
+            print '... ' + str(len(classes_predictions)) + ' patches detected as Pos'
+
+            if iteration % 5 == 0 and verbose > 0:
+                patches_positive = np.squeeze(patches[np.where(y_pred[:, 1] > threshold)[0]])
+                display_patches(patches_positive, nb_of_subplots=[10, 10], nb_of_figures_to_display=1)
+
+            last_coord_positive = [[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2]] for coord in classes_predictions]
+            coord_positive.update(last_coord_positive)
+            coord_positive_saved.extend([[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2], y_pred[coord, 1]] for coord in classes_predictions])
+        else:
+            last_coord_positive = []
+
+        iteration += 1
+
+    # write results
+    input_image = im_data.copy()
+    input_image.data *= 0
+    for coord in coord_positive_saved:
+        input_image.data[coord[0], coord[1], coord[2]] = 1
+    path_input, file_input, ext_input = sct.extract_fname(fname_input)
+    fname_seg_tmp = path_output + file_input + "_cord_prediction_seg_tmp" + ext_input
+    input_image.setFileName(fname_seg_tmp)
+    input_image.save()
+
+    return coord_positive_saved, fname_seg_tmp
+
+def prediction_init(im_data, model, initial_resolution, list_offset, threshold, feature_fct, patch_size, path_output, verbose=0):
     
     time_prediction = time.time()
-
-    patch_size = 32
-
-    print '\nLoading model...'
-    model.load(fname_model)
-    print '...\n'
-
-    im_data = Image(fname_input)
-
-    # intensity normalization
-    im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
 
     nx, ny, nz, nt, px, py, pz, pt = im_data.dim
     print 'Image Dimensions: ' + str([nx, ny, nz]) + '\n'
@@ -229,89 +282,25 @@ def predict(fname_input, fname_model, model, initial_resolution, list_offset, th
         nb_voxels_explored += len(patches)
     
     print '\n# of voxels explored = ' + str(nb_voxels_explored) + '/' + str(nb_voxels_image) + ' (' + str(round(100.0 * nb_voxels_explored / nb_voxels_image, 2)) + '%)'
-    print '# of slice without any pos predicted voxel: ' + str(nb_slice_no_detection) + '/' + str(int(float(nz)/initial_resolution[2])) + ' (' + str(round(float(nb_slice_no_detection*initial_resolution[2]*100)/nz,2)) + '%)\n'
+    print '# of slice without pos: ' + str(nb_slice_no_detection) + '/' + str(int(float(nz)/initial_resolution[2])) + ' (' + str(round(float(nb_slice_no_detection*initial_resolution[2]*100)/nz,2)) + '%)\n'
     last_coord_positive = coord_positive
 
 
-    # charley: Tester set_params(class_weight=None)
-
-
-    # informative data
-    iteration = 1
-
-    print '\nIterative prediction based on mathematical morphology'
-    while len(last_coord_positive) != 0:
-        print '\nIteration #' + str(iteration) + '. # of positive voxel to explore:' + str(len(last_coord_positive))
-        current_coordinates = SortedListWithKey(key=itemgetter(0, 1, 2))
-        for coord in last_coord_positive:
-            for offset in list_offset:
-                new_coord = [coord[0] + offset[0], coord[1] + offset[1], coord[2] + offset[2]]
-                if 0 <= new_coord[0] < im_data.data.shape[0] and 0 <= new_coord[1] < im_data.data.shape[1] and 0 <= new_coord[2] < im_data.data.shape[2]:
-                    if current_coordinates.count(new_coord) == 0:
-                        if coord_positive.count(new_coord) == 0:
-                            current_coordinates.add(new_coord)
-
-        print 'Patch extraction (N=' + str(len(current_coordinates)) + ')'
-
-        patches = extract_patches_from_image(im_data, current_coordinates, patch_size=patch_size, verbose=0)
-        
-        if patches is not None:
-            patches = np.asarray(patches, dtype=int)
-            patches = patches.reshape(patches.shape[0], patches.shape[1], patches.shape[2])
-
-            X_test = feature_fct(patches)
-            y_pred = model.predict(X_test)
-
-            y_pred = np.array(y_pred)
-            classes_predictions = np.where(y_pred[:, 1] > threshold)[0].tolist()
-
-            if iteration % 5 == 0 and verbose > 1:
-                patches_positive = np.squeeze(patches[np.where(y_pred[:, 1] > threshold)[0]])
-                display_patches(patches_positive, nb_of_subplots=[10, 10], nb_of_figures_to_display=1)
-
-            last_coord_positive = [[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2]] for coord in classes_predictions]
-            coord_positive.update(last_coord_positive)
-            coord_positive_saved.extend([[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2], y_pred[coord, 1]] for coord in classes_predictions])
-            nb_voxels_explored += len(patches)
-        else:
-            last_coord_positive = []
-
-        iteration += 1
+    coord_positive_saved, fname_seg_tmp = predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, range(0, nz), list_offset, path_output)
 
     print '\nTime to predict cord location: ' + str(np.round(time.time() - time_prediction)) + ' seconds'
-    print '# of voxels explored = ' + str(nb_voxels_explored) + '/' + str(nb_voxels_image) + ' (' + str(round(100.0 * nb_voxels_explored / nb_voxels_image, 2)) + '%)'
     z_pos_pred = []
     for coord in coord_positive_saved:
         z_pos_pred.append(coord[2])
     z_pos_pred = np.array(z_pos_pred)
     nb_pos_slice = len(np.unique(z_pos_pred))
-    print '# of slice without any pos predicted voxel: ' + str(nz-nb_pos_slice) + '/' + str(nz) + ' (' + str(round(100.0 * (nz-nb_pos_slice) / nx, 2)) + '%)\n'
+    print '# of slice without pos: ' + str(nz-nb_pos_slice) + '/' + str(nz) + ' (' + str(round(float(100.0 * (nz-nb_pos_slice)) / nz, 2)) + '%)\n'
 
+    return fname_seg_tmp
 
-
-    # write results
-    print '\nWriting results'
-    input_image = im_data.copy()
-    input_image.data *= 0
-    for coord in coord_positive_saved:
-        input_image.data[coord[0], coord[1], coord[2]] = coord[3]
-    path_input, file_input, ext_input = sct.extract_fname(fname_input)
-    fname_output = path_output + file_input + "_cord_prediction" + ext_input
-    input_image.setFileName(fname_output)
-    input_image.save()
-
-    print '\nInput Image: ' + fname_input
-    print 'Output Image: ' + fname_output + '\n'
-
-
-
-
-
-def create_image_graph(fname_seg, path_output):
+def shortest_path_graph(fname_seg, path_output):
 
     # TODO:     Nettoyer code
-            #   Initialiser autrement le premier src: centre de masse
-            #   Comment faire le lien dans les trous: prediction circulaire via la seed jusqua ce quon trouve
 
     im = Image(fname_seg)
     im_data = im.data
@@ -335,17 +324,22 @@ def create_image_graph(fname_seg, path_output):
                 graph_bound.append(range(last_bound+1,z))
             last_bound = z
             cmpt += 1
-    if last_bound != im.dim[2]:
+
+    if last_bound+1 != im.dim[2]:
         graph_bound.append(range(last_bound+1,im.dim[2]))
 
-    from scipy.spatial import distance
+    idx_slice_not_detected = list(set(range(im.dim[2]))-set([xx for sublist in graph_bound for xx in sublist]))
+
+    def centeroidnp(arr):
+        length = arr.shape[0]
+        sum_x = np.sum(arr[:, 0])
+        sum_y = np.sum(arr[:, 1])
+        return sum_x/length, sum_y/length
 
     node_list = []
     cmpt_bloc = 0
     centerline_coord = {}
     for bloc in graph_bound:
-
-        print '\n Bloc #: ' + str(cmpt_bloc)
         cmpt_bloc += 1
 
         bloc_matrix = []
@@ -366,12 +360,14 @@ def create_image_graph(fname_seg, path_output):
         matrix_list.append(np.ones((len_bloc[len(bloc)-1], tot_candidates_bloc))*1000.0)
 
         matrix = np.concatenate(matrix_list)
-        print matrix.shape
         matrix[range(matrix.shape[0]), range(matrix.shape[1])] = 0
 
         matrix_dijkstra = shortest_path(matrix)
         first_slice_info = image_graph[bloc[0]]['prob']
-        src = first_slice_info.index(max(first_slice_info))
+        cOm_0 = centeroidnp(np.array([coord for coord in  image_graph[bloc[0]]['coords']]))
+        list_cOm_candidates = distance.cdist(image_graph[bloc[0]]['coords'], [cOm_0 for i in range(len(image_graph[bloc[0]]['coords']))], 'euclidean').tolist()
+        list_cOm_candidates = [l[0] for l in list_cOm_candidates]
+        src = list_cOm_candidates.index(min(list_cOm_candidates))
         
         node_list_cur = []
         node_list_cur.append(src)
@@ -389,52 +385,67 @@ def create_image_graph(fname_seg, path_output):
             centerline_coord[i] = [image_graph[i]['coords'][node_list_cur[cmpt]][0], image_graph[i]['coords'][node_list_cur[cmpt]][1], i]
             cmpt += 1
     
-    print centerline_coord
-
     # write results
     print '\nWriting results'
     input_image = im.copy()
     input_image.data *= 0
-    for z in range(len(centerline_coord)):
-        if len(image_graph[z]['coords']) != 0:
+    for z in range(im.dim[2]):
+        if z in centerline_coord:
             input_image.data[centerline_coord[z][0], centerline_coord[z][1], z] = 1
     path_input, file_input, ext_input = sct.extract_fname(fname_input)
-    fname_output = path_output + file_input + "_cord_prediction_reg" + ext_input
-    input_image.setFileName(fname_output)
+    fname_output_tmp = path_output + file_input + "_cord_prediction_reg_tmp" + ext_input
+    input_image.setFileName(fname_output_tmp)
     input_image.save()
 
-    print '\nInput Image: ' + fname_seg
-    print 'Output Image: ' + fname_output + '\n'
+    return idx_slice_not_detected, fname_output_tmp
 
-        # any(e[1] == z for e in data)
-        # if len(image_graph[z]['coords']) != 0:
-        #     centerline_coord[z] = []
+def post_processing(im_data, fname_seg_tmp, model, offset, max_iter, threshold, feature_fct, patch_size, path_output, verbose=0):
+    
+    time_prediction = time.time()
 
+    nx, ny, nz, nt, px, py, pz, pt = im_data.dim
+    print 'Image Dimensions: ' + str([nx, ny, nz]) + '\n'
+    nb_voxels_image = nx * ny * nz
 
-    # ii, jj = np.unravel_index(test.argmin(), test.shape)
-    # coord_0_list = np.where(test == test[ii,jj])[0].tolist()
-    # coord_1_list = np.where(test == test[ii,jj])[1].tolist()
-    # coord_zip = zip(coord_0_list, coord_1_list)
+    im_seg = Image(fname_seg_tmp)
+    im_seg_data = im_seg.data
+    sum_seg = [np.sum(im_seg_data[:,:,z]) for z in range(im_seg.dim[2])]
+    number_no_detection = sum(1 for cmpt in sum_seg if cmpt == 0)
+    iter_cmpt = 1
+    while number_no_detection != nz and max_iter > iter_cmpt:
 
-    # prob_candidates = []
-    # for i_0, i_1 in coord_zip:
-    #     prob_candidates.append(image_graph[0]['prob'][i_0] + image_graph[0]['prob'][i_1])
+        print '\nIteration #' + str(iter_cmpt)
+        print '...Dijkstra regularization'
+        idx2process, fname_centerline_tmp = shortest_path_graph(fname_seg_tmp, path_output)
+        print idx2process
 
-    # best_idx_0_1 = coord_zip[prob_candidates.index(max(prob_candidates))]
+        print '...NURBS interpolation'
+        x_centerline, y_centerline, z_centerline = smooth_centerline(fname_centerline_tmp, algo_fitting='nurbs', nurbs_pts_number=3000)[:3]
 
-    # print test[:5,:5]
-    # test = matrix_0[:len_bloc_0[0],len_bloc_0[0]:len_bloc_0[0]+len_bloc_0[0+1]]
-    # print test[:5,:5]
+        print '# of slices without pos before prediction #' + str(iter_cmpt) + ': ' + str(len(idx2process)) + '/' + str(nz) + ' (' + str(round(float(100.0 * len(idx2process)) / nz, 2)) + '%)\n'
+        coord_positive_saved = zip(x_centerline, y_centerline, z_centerline)
+        list_offset = [[xv, yv, zv] for xv in range(-offset[0]-iter_cmpt,offset[0]+iter_cmpt) 
+                                    for yv in range(-offset[1]-iter_cmpt,offset[1]+iter_cmpt) 
+                                    for zv in range(-offset[2]-2*iter_cmpt,offset[2]+2*iter_cmpt) if [xv, yv, zv] != [0, 0, 0]]
+        print '...Classifier prediction'
+        coord_positive_saved, fname_seg_tmp = predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, idx2process, list_offset, path_output)
 
-    # matrix_0_1 = np.hstack((np.ones((len_bloc_0[0], len_bloc_0[1]))*1000.0,
-    #                         bloc_matrix_0[0],
+        z_pos_pred = np.array([coord[2] for coord in coord_positive_saved])
+        number_no_detection = nz - len(np.unique(z_pos_pred))
+        print '# of slices without pos after prediction #' + str(iter_cmpt) + ': ' + str(number_no_detection) + '/' + str(nz) + ' (' + str(round(float(100.0 * (number_no_detection)) / nz, 2)) + '%)\n'
 
-    #                         )
-#     for graph_node_src in image_graph[0]:
-#         for graph_node_dest in image_graph[1]:
+        iter_cmpt += 1
 
-
-
+    # write results
+    print '\nWriting results'
+    input_image = im_data.copy()
+    input_image.data *= 0
+    for coord in coord_positive_saved:
+        input_image.data[coord[0], coord[1], coord[2]] = 1
+    path_input, file_input, ext_input = sct.extract_fname(fname_input)
+    fname_output = path_output + file_input + "_cord_prediction_end" + ext_input
+    input_image.setFileName(fname_output)
+    input_image.save()
 
 def get_parser():
     # Initialize parser
@@ -489,11 +500,14 @@ if __name__ == "__main__":
     parser = get_parser()
     arguments = parser.parse(sys.argv[1:])
 
-    fname_model = '/Users/chgroc/data/spine_detection/model_0-001_0-5_recall/LinearSVM_train'
+    fname_model = '/Users/chgroc/data/spine_detection/model_0-001_0-5_recall_rbf/SVM_train'
     model_svm = Classifier_svm()
+    print '\nLoading model...'
+    model_svm.load(fname_model)
+    print '...\n'
 
     # Find threshold value from training
-    fname_trial = '/Users/chgroc/data/spine_detection/results_0-001_0-5_recall/LinearSVM_trials.pkl'
+    fname_trial = '/Users/chgroc/data/spine_detection/results_0-001_0-5_recall_rbf/SVM_trials.pkl'
     with open(fname_trial) as outfile:    
         trial = pickle.load(outfile)
         outfile.close()
@@ -503,15 +517,21 @@ if __name__ == "__main__":
     threshold = trial[idx_best_params]['result']['thrsh']
 
     feature_fct = extract_hog_feature
-
-    initial_resolution = [3, 3, 5]
-    list_offset = [[xv, yv, zv] for xv in range(-1,1) for yv in range(-1,1) for zv in range(-40,40) if [xv, yv, zv] != [0, 0, 0]]
+    patch_size = 32
 
     fname_input = arguments['-i']
+    im_data = Image(fname_input)
+    # intensity normalization
+    im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
 
     folder_output = sct.slash_at_the_end(arguments['-ofolder'], slash=1)
 
-    # predict(fname_input, fname_model, model_svm, initial_resolution, list_offset, 
-    #             threshold = threshold, feature_fct = feature_fct, path_output = folder_output, verbose=0)
-    create_image_graph('/Users/chgroc/data/spine_detection/results3D/ALT_t2_cord_prediction.nii.gz', path_output = folder_output)
-    print fname_input
+    initial_resolution = [3, 3, 10]
+    list_offset = [[xv, yv, zv] for xv in range(-3,3) for yv in range(-3,3) for zv in range(-5,5) if [xv, yv, zv] != [0, 0, 0]]
+    print 'Run Initial prediction based on mathematical morphology'
+    fname_seg = prediction_init(im_data, model_svm, initial_resolution, list_offset, 
+                threshold, feature_fct, patch_size, folder_output, verbose=0)
+    
+    offset = [0,0,4]
+    max_iter = 5
+    post_processing(im_data, fname_seg, model_svm, offset, max_iter, threshold, feature_fct, patch_size, folder_output)
