@@ -763,11 +763,6 @@ class Trainer():
             print model_hyperparam_hyperopt
             print ' '
 
-            # UPDATE FROM BENJAMIN
-            # TO REMOVE OR DO BETTER
-            self.model.load('/home/neuropoly/data/model_new_pipeline_large/CNN_000028160256_000000_weights')
-            limit_begin = 28160256
-
 
             # Objective function
             def hyperopt_train_test(params):
@@ -777,6 +772,11 @@ class Trainer():
                                                                 train_minibatch_size, self.training_dataset)
 
                 self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
+
+                # UPDATE FROM BENJAMIN
+                # TO REMOVE OR DO BETTER
+                self.model.load('/home/neuropoly/data/model_new_pipeline_large/CNN_000028160256_000000_weights')
+                limit_begin = 28160256
 
                 stats = {'n_train': 0, 'n_train_pos': 0,
                         'n_test': 0, 'n_test_pos': 0,
