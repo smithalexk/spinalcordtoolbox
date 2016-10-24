@@ -320,10 +320,11 @@ class FileManager(object):
             pbar.start()
             number_done = 0
             for data in minibatch_iterator_test:
-                if np.ndim(data['patches_gold']) == 4:
-                    labels.extend(self.fct_groundtruth_patch(data))
-                    number_done += data['patches_gold'].shape[0]
-                    pbar.update(number_done)
+                if 'patches_gold' in data:
+                    if np.ndim(data['patches_gold']) == 4:
+                        labels.extend(self.fct_groundtruth_patch(data))
+                        number_done += data['patches_gold'].shape[0]
+                        pbar.update(number_done)
             pbar.finish()
 
             # processing results
