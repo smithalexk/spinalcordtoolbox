@@ -12,6 +12,7 @@
 #########################################################################################
 
 import os
+import sys
 import sct_utils as sct
 from msct_image import Image
 import numpy as np
@@ -283,11 +284,11 @@ class FileManager(object):
 
         x, y, z = np.mgrid[0:image_dim[0], 0:image_dim[1], 0:image_dim[2]]
         indexes = np.array(zip(x.ravel(), y.ravel(), z.ravel()))
-        physical_coordinates = np.asarray(image.transfo_pix2phys(indexes))
 
-        random_batch = np.random.choice(physical_coordinates.shape[0], int(round(physical_coordinates.shape[0] * self.ratio_patches_voxels)))
+        random_batch = np.random.choice(indexes.shape[0], int(round(indexes.shape[0] * self.ratio_patches_voxels)))
 
-        return physical_coordinates[random_batch]
+        physical_coordinates = np.asarray(image.transfo_pix2phys(indexes[random_batch]))
+        return physical_coordinates
 
     def worker_explore(self, arguments_worker):
         try:
@@ -298,6 +299,7 @@ class FileManager(object):
             fname_gold_images = dataset[i][1]
             reference_image = Image(self.dataset_path + fname_raw_images[0])  # first raw image is selected as reference
 
+            print 'Starting computing patches on ' + self.dataset_path + fname_raw_images[0]
             patches_coordinates = self.compute_patches_coordinates(reference_image)
             print 'Number of patches in ' + fname_raw_images[0] + ' = ' + str(patches_coordinates.shape[0])
 
@@ -318,10 +320,11 @@ class FileManager(object):
             pbar.start()
             number_done = 0
             for data in minibatch_iterator_test:
-                if np.ndim(data['patches_gold']) == 4:
-                    labels.extend(self.fct_groundtruth_patch(data))
-                    number_done += data['patches_gold'].shape[0]
-                    pbar.update(number_done)
+                if 'patches_gold' in data:
+                    if np.ndim(data['patches_gold']) == 4:
+                        labels.extend(self.fct_groundtruth_patch(data))
+                        number_done += data['patches_gold'].shape[0]
+                        pbar.update(number_done)
             pbar.finish()
 
             # processing results
@@ -340,6 +343,7 @@ class FileManager(object):
             return
 
         except Exception as e:
+            import sys
             print 'Error on line {}'.format(sys.exc_info()[-1].tb_lineno)
             raise e
 
@@ -347,6 +351,7 @@ class FileManager(object):
         if self.extract_all_positive:
             for i in range(len(self.training_dataset)):
                 fname_gold_image = self.training_dataset[i][1][0]  # first gold image is the reference
+                print i, '/', len(self.training_dataset), fname_gold_image
                 im_gold = Image(self.dataset_path + fname_gold_image)
                 coordinates_positive = np.where(im_gold.data == 1)
                 coordinates_positive = np.asarray([[coordinates_positive[0][j], coordinates_positive[1][j], coordinates_positive[2][j]] for j in range(len(coordinates_positive[0]))])
@@ -360,10 +365,14 @@ class FileManager(object):
                 with bz2.BZ2File(self.path_output + 'patches_coordinates_positives_' + file_fname + '.pbz2', 'w') as f:
                     pickle.dump(results_positive, f)
 
+            print 'Finished extracting positive patches'
+            
+        print 'Starting processing images on', self.cpu_number, 'cores'
+                    
         # TRAINING DATASET
         classes_training = {}
 
-        pool = mp.Pool(processes=self.cpu_number)
+        pool = mp.Pool(processes=self.cpu_number, maxtasksperchild=1)
         results = pool.map(self.worker_explore, itertools.izip(range(len(self.training_dataset)), itertools.repeat(self.training_dataset)))
 
         pool.close()
@@ -398,7 +407,7 @@ class FileManager(object):
         # TESTING DATASET
         classes_testing = {}
 
-        pool = mp.Pool(processes=self.cpu_number)
+        pool = mp.Pool(processes=self.cpu_number, maxtasksperchild=1)
         results = pool.map(self.worker_explore, itertools.izip(range(len(self.testing_dataset)), itertools.repeat(self.testing_dataset)))
 
         pool.close()
@@ -755,6 +764,7 @@ class Trainer():
             print model_hyperparam_hyperopt
             print ' '
 
+
             # Objective function
             def hyperopt_train_test(params):
 
@@ -763,6 +773,11 @@ class Trainer():
                                                                 train_minibatch_size, self.training_dataset)
 
                 self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
+
+                # UPDATE FROM BENJAMIN
+                # TO REMOVE OR DO BETTER
+                self.model.load('/home/neuropoly/data/model_new_pipeline_large/CNN_000028160256_000000_weights')
+                limit_begin = 28160256
 
                 stats = {'n_train': 0, 'n_train_pos': 0,
                         'n_test': 0, 'n_test_pos': 0,
@@ -781,8 +796,19 @@ class Trainer():
                         stats['n_train_pos'] += sum(y_train)
                         print X_train.shape[0]
 
+                        if stats['n_train'] <= limit_begin:
+                            print stats['n_train']
+                            continue
+
                         print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
-                        self.model.train(X_train, y_train)
+                        try:
+                            self.model.train(X_train, y_train)
+                        except Exception as e:
+                            print e
+                            print 'stats[n_train] = ', stats['n_train']
+                            print 'Shape:'
+                            print X_train.shape, y_train.shape
+                            continue
 
                         # evaluation
                         if cmpt % self.param_hyperopt['eval_factor'] == 0 and cmpt != 0:
