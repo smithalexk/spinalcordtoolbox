@@ -763,6 +763,12 @@ class Trainer():
             print model_hyperparam_hyperopt
             print ' '
 
+            # UPDATE FROM BENJAMIN
+            # TO REMOVE OR DO BETTER
+            self.model.load('/home/neuropoly/data/model_new_pipeline_large/CNN_000028160256_000000_weights')
+            limit_begin = 28160256
+
+
             # Objective function
             def hyperopt_train_test(params):
 
@@ -788,8 +794,18 @@ class Trainer():
                         stats['n_train'] += X_train.shape[0]
                         stats['n_train_pos'] += sum(y_train)
 
+                        if stats['n_train'] <= limit_begin:
+                            continue
+
                         print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
-                        self.model.train(X_train, y_train)
+                        try:
+                            self.model.train(X_train, y_train)
+                        except Exception as e:
+                            print e
+                            print 'stats[n_train] = ', stats['n_train']
+                            print 'Shape:'
+                            print X_train.shape, y_train.shape
+                            continue
 
                         # evaluation
                         if cmpt % self.param_hyperopt['eval_factor'] == 0 and cmpt != 0:
