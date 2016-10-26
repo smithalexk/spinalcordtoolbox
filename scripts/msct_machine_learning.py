@@ -36,7 +36,7 @@ import time
 import random 
 import math
 import matplotlib.pyplot as plt
-
+from medpy.filter import IntensityRangeStandardization
 
 def _pickle_method(method):
     """
@@ -888,14 +888,22 @@ class Trainer():
         print 'Best hyper params: ' + str(model_hyperparam_opt)
 
         self.model.set_params(model_hyperparam_opt)
+
+        coord_prepared_train, label_prepared_train = {}, {}
+        for i in coord_train:
+            nb_to_extract = int(len(coord_train[str(i)]) * self.param_hyperopt['ratio_img_train'])
+            coord_prepared_train[str(i)] = coord_train[str(i)][:nb_to_extract]
+            label_prepared_train[str(i)] = label_train[str(i)][:nb_to_extract]
             
+        nb_patch_all_train_subj = [len(coord_prepared_train[str(i)]) for i in coord_prepared_train] # List nb patches available for each subj in all training dataset
         if self.param_training['minibatch_size_train'] is not None:
             train_minibatch_size = self.param_training['minibatch_size_train']
         else:
-            train_minibatch_size = sum([len(coord_train[str(i)]) for i in coord_train]) # Define minibatch size used for training
+            train_minibatch_size = sum(nb_patch_all_train_subj) # Define minibatch size used for hyperopt training
 
+        print train_minibatch_size
         # Create minibatch iterators for training
-        minibatch_iterator_train = self.iter_minibatches_trainer(coord_train, label_train, 
+        minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train, label_prepared_train, 
                                                                     train_minibatch_size, self.training_dataset)
 
         stats = {'n_train': 0, 'n_train_pos': 0,
@@ -903,6 +911,12 @@ class Trainer():
         
         print '\nStarting Training...'
         print '... with ' + str(len(coord_train)) + ' images for training\n'
+        pbar = ProgressBar(widgets=[
+                Timer(),
+                ' ', Percentage(),
+                ' ', Bar(),
+                ' ', ETA()], max_value=n_epoch*sum([len(coord_prepared_train[str(i)]) for i in coord_prepared_train]))
+        pbar.start()
         for n_epoch in range(self.param_training['number_of_epochs']):
             for i, data in enumerate(minibatch_iterator_train):
                 X_train = np.array(data['patches_feature'])
@@ -910,9 +924,11 @@ class Trainer():
 
                 stats['n_train'] += X_train.shape[0]
                 stats['n_train_pos'] += sum(y_train)
-                print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
+                # print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
 
                 self.model.train(X_train, y_train)
+                pbar.update(X_train.shape[0])
+        pbar.finish()
 
         stats['total_fit_time'] = time.time() - stats['t0']
 
@@ -1057,3 +1073,42 @@ class Trainer():
         pickle.dump(stats, open(fname_out_progress, "wb"))
 
         return y_test, y_pred, threshold
+
+    # def test_hist_match(self, fname_raw_images, train=0):
+
+    #     def cstretch(img, r1, r0):
+    #         lmin = float(np.amin(img))
+    #         lmax = float(np.percentile(img, 100))
+    #         anorm = (img - lmin)*(r1 - r0)/(lmax - lmin)
+    #         return anorm
+        
+    #     fname_subj = [fname[0].split('.')[0] for fname in fname_raw_images]
+    #     raw_images = [Image(self.dataset_path + fname + '.nii.gz') for fname in fname_subj]
+    #     seg_images = [Image(self.dataset_path + fname + '_seg.nii.gz') for fname in fname_subj]
+
+    #     if train:
+    #         print '\nContrast Stretching'
+    #         raw_images_cstretch = [cstretch(im.data, 1, 0) for im in raw_images]
+    #         irs = IntensityRangeStandardization(cutoffp=(1, 99), landmarkp=[30, 40, 50, 60, 70], stdrange=(0,1))
+    #         print 'IRS model building...'
+    #         self.irs_model = irs.train(raw_images_cstretch)
+    #         print '...!\n'
+    #         cmpt = 0
+    #     else:
+    #         cmpt = 100
+
+    #     for i, im in enumerate(raw_images):
+    #         print cmpt
+
+    #         im.data = cstretch(im.data, 1, 0)
+    #         im.setFileName(self.results_path + 'irs/' + str(cmpt).zfill(3) + '.nii.gz')
+    #         im.save()
+
+    #         im.data = self.irs_model.transform(im.data)
+    #         im.setFileName(self.results_path + 'irs/' + str(cmpt).zfill(3) + '_cor.nii.gz')
+    #         im.save()
+
+    #         seg_images[i].setFileName(self.results_path + 'irs/' + str(cmpt).zfill(3) + '_seg.nii.gz')
+    #         seg_images[i].save()
+            
+    #         cmpt += 1
