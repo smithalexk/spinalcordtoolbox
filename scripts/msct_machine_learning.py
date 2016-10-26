@@ -764,15 +764,10 @@ class Trainer():
             print model_hyperparam_hyperopt
             print ' '
 
-
             # Objective function
             def hyperopt_train_test(params):
-
-                # Create minibatch iterators for hyperopt training and testing
-                minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
-                                                                train_minibatch_size, self.training_dataset)
-
-                self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
+                # Update model hyperparam with params provided by hyperopt library algo
+                self.model.set_params(params)
 
                 # UPDATE FROM BENJAMIN
                 # TO REMOVE OR DO BETTER
@@ -788,6 +783,12 @@ class Trainer():
                 
                 cmpt = 0
                 for n_epoch in range(self.param_training['number_of_epochs']):
+                    # Create minibatch iterators for hyperopt training and testing
+                    minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt,
+                                                                             label_prepared_train_hyperopt,
+                                                                             train_minibatch_size,
+                                                                             self.training_dataset)
+
                     for i, data in enumerate(minibatch_iterator_train):
                         X_train = np.array(data['patches_feature'])
                         y_train = np.array(data['patches_label'])
