@@ -42,6 +42,9 @@ import matplotlib.pyplot as plt
 from scipy.sparse.csgraph import shortest_path
 from sct_straighten_spinalcord import smooth_centerline
 from scipy.spatial import distance
+from math import sqrt
+import bz2
+
 
 def extract_patches_from_image(image_file, patches_coordinates, patch_size=32, slice_of_interest=None, verbose=1):
     result = []
@@ -176,6 +179,11 @@ def plot_2D_detections(im_data, slice_number, initial_coordinates, classes_predi
 
 def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, idx_2_process, list_offset, path_output, verbose=0):
 
+    coord_positive_saved = [tuple([int(ii) for ii in sublist]) for sublist in coord_positive_saved 
+                                                                    if sublist[0] < im_data.data.shape[0]
+                                                                        and sublist[1] < im_data.data.shape[1]
+                                                                        and sublist[2] < im_data.data.shape[2]]
+    coord_positive_saved
     coord_positive = SortedListWithKey(key=itemgetter(0, 1, 2))
     coord_positive.update(coord_positive_saved)
     last_coord_positive = coord_positive
@@ -183,9 +191,9 @@ def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, f
     # informative data
     iteration = 1
 
-    print '\nIterative prediction based on mathematical morphology'
+    print '\n... Iterative prediction based on mathematical morphology'
     while len(last_coord_positive) != 0:
-        print '\nIteration #' + str(iteration) + '. # of positive voxel to explore:' + str(len(last_coord_positive))
+        print '\n... ... Iteration #' + str(iteration) + '. # of positive voxel to explore: ' + str(len(last_coord_positive))
         current_coordinates = SortedListWithKey(key=itemgetter(0, 1, 2))
         for coord in last_coord_positive:
             for offset in list_offset:
@@ -196,7 +204,7 @@ def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, f
                             if coord_positive.count(new_coord) == 0:
                                 current_coordinates.add(new_coord)
 
-        print 'Patch extraction (N=' + str(len(current_coordinates)) + ')'
+        print '... ... Patch extraction (N=' + str(len(current_coordinates)) + ')'
 
         patches = extract_patches_from_image(im_data, current_coordinates, patch_size=patch_size, verbose=0)
         
@@ -209,9 +217,9 @@ def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, f
 
             y_pred = np.array(y_pred)
             classes_predictions = np.where(y_pred[:, 1] > threshold)[0].tolist()
-            print '... ' + str(len(classes_predictions)) + ' patches detected as Pos'
+            print '... ... ' + str(len(classes_predictions)) + ' patches detected as Pos'
 
-            if iteration % 5 == 0 and verbose > 0:
+            if iteration % 2 == 0 and verbose != 0:
                 patches_positive = np.squeeze(patches[np.where(y_pred[:, 1] > threshold)[0]])
                 display_patches(patches_positive, nb_of_subplots=[10, 10], nb_of_figures_to_display=1)
 
@@ -233,10 +241,13 @@ def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, f
     input_image.setFileName(fname_seg_tmp)
     input_image.save()
 
-    return coord_positive_saved, fname_seg_tmp
+    z_pos_pred = np.array([coord[2] for coord in coord_positive_saved])
+    number_no_detection = im_data.dim[2] - len(np.unique(z_pos_pred))
+
+    return coord_positive_saved, fname_seg_tmp, number_no_detection
 
 def prediction_init(im_data, model, initial_resolution, list_offset, threshold, feature_fct, patch_size, path_output, verbose=0):
-    
+
     time_prediction = time.time()
 
     nx, ny, nz, nt, px, py, pz, pt = im_data.dim
@@ -254,11 +265,11 @@ def prediction_init(im_data, model, initial_resolution, list_offset, threshold, 
     coord_positive = SortedListWithKey(key=itemgetter(0, 1, 2))
     coord_positive_saved = []
 
-    print 'Initial prediction:\n'
+    print '... Initial prediction:\n'
     tot_pos_pred = 0
     nb_slice_no_detection = 0
     for slice_number in range(0, nz, initial_resolution[2]):
-        print '... slice #' + str(slice_number) + '/' + str(nz)
+        print '... ... slice #' + str(slice_number) + '/' + str(nz)
         patches = extract_patches_from_image(im_data, initial_coordinates, patch_size=patch_size, slice_of_interest=slice_number, verbose=0)
         patches = np.asarray(patches, dtype=int)
         patches = patches.reshape(patches.shape[0], patches.shape[1], patches.shape[2])
@@ -268,12 +279,12 @@ def prediction_init(im_data, model, initial_resolution, list_offset, threshold, 
 
         y_pred = np.array(y_pred)
         classes_predictions = np.where(y_pred[:, 1] > threshold)[0].tolist()
-        print '... # of pos prediction: ' + str(len(classes_predictions)) + '\n'
+        print '... ... # of pos prediction: ' + str(len(classes_predictions)) + '\n'
         tot_pos_pred += len(classes_predictions)
         if not len(classes_predictions):
             nb_slice_no_detection += 1
 
-        if slice_number % 100 == 0 and verbose > 0:
+        if slice_number % 20 == 0 and verbose > 0:
             plot_2D_detections(im_data, slice_number, initial_coordinates, classes_predictions)
         
         coord_positive.update([[initial_coordinates[coord][0], initial_coordinates[coord][1], slice_number] for coord in classes_predictions])
@@ -281,20 +292,17 @@ def prediction_init(im_data, model, initial_resolution, list_offset, threshold, 
         
         nb_voxels_explored += len(patches)
     
-    print '\n# of voxels explored = ' + str(nb_voxels_explored) + '/' + str(nb_voxels_image) + ' (' + str(round(100.0 * nb_voxels_explored / nb_voxels_image, 2)) + '%)'
-    print '# of slice without pos: ' + str(nb_slice_no_detection) + '/' + str(int(float(nz)/initial_resolution[2])) + ' (' + str(round(float(nb_slice_no_detection*initial_resolution[2]*100)/nz,2)) + '%)\n'
+    print '\n... # of voxels explored = ' + str(nb_voxels_explored) + '/' + str(nb_voxels_image) + ' (' + str(round(100.0 * nb_voxels_explored / nb_voxels_image, 2)) + '%)'
+    print '... # of slice without pos: ' + str(nb_slice_no_detection) + '/' + str(int(float(nz)/initial_resolution[2])) + ' (' + str(round(float(nb_slice_no_detection*initial_resolution[2]*100)/nz,2)) + '%)\n'
     last_coord_positive = coord_positive
 
+    coord_positive_saved, fname_seg_tmp, number_no_detection = predict_along_centerline(im_data, model, patch_size, 
+                                                                                        coord_positive_saved, feature_fct, 
+                                                                                        threshold, range(0, nz), list_offset, 
+                                                                                        path_output, verbose)
 
-    coord_positive_saved, fname_seg_tmp = predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, range(0, nz), list_offset, path_output)
-
-    print '\nTime to predict cord location: ' + str(np.round(time.time() - time_prediction)) + ' seconds'
-    z_pos_pred = []
-    for coord in coord_positive_saved:
-        z_pos_pred.append(coord[2])
-    z_pos_pred = np.array(z_pos_pred)
-    nb_pos_slice = len(np.unique(z_pos_pred))
-    print '# of slice without pos: ' + str(nz-nb_pos_slice) + '/' + str(nz) + ' (' + str(round(float(100.0 * (nz-nb_pos_slice)) / nz, 2)) + '%)\n'
+    print '\n... Time to predict cord location: ' + str(np.round(time.time() - time_prediction)) + ' seconds'
+    print '... # of slice without pos: ' + str(number_no_detection) + '/' + str(nz) + ' (' + str(round(float(100.0 * (number_no_detection)) / nz, 2)) + '%)\n'
 
     return fname_seg_tmp
 
@@ -386,7 +394,7 @@ def shortest_path_graph(fname_seg, path_output):
             cmpt += 1
     
     # write results
-    print '\nWriting results'
+    print '\n... ... Writing results'
     input_image = im.copy()
     input_image.data *= 0
     for z in range(im.dim[2]):
@@ -414,25 +422,24 @@ def post_processing(im_data, fname_seg_tmp, model, offset, max_iter, threshold, 
     iter_cmpt = 1
     while number_no_detection != nz and max_iter > iter_cmpt:
 
-        print '\nIteration #' + str(iter_cmpt)
-        print '...Dijkstra regularization'
+        print '\n... Iteration #' + str(iter_cmpt)
+        print '... Dijkstra regularization'
         idx2process, fname_centerline_tmp = shortest_path_graph(fname_seg_tmp, path_output)
-        print idx2process
 
-        print '...NURBS interpolation'
+        print '... NURBS interpolation'
         x_centerline, y_centerline, z_centerline = smooth_centerline(fname_centerline_tmp, algo_fitting='nurbs', nurbs_pts_number=3000)[:3]
 
-        print '# of slices without pos before prediction #' + str(iter_cmpt) + ': ' + str(len(idx2process)) + '/' + str(nz) + ' (' + str(round(float(100.0 * len(idx2process)) / nz, 2)) + '%)\n'
+        print '... # of slices without pos before prediction #' + str(iter_cmpt) + ': ' + str(len(idx2process)) + '/' + str(nz) + ' (' + str(round(float(100.0 * len(idx2process)) / nz, 2)) + '%)\n'
+
         coord_positive_saved = zip(x_centerline, y_centerline, z_centerline)
         list_offset = [[xv, yv, zv] for xv in range(-offset[0]-iter_cmpt,offset[0]+iter_cmpt) 
                                     for yv in range(-offset[1]-iter_cmpt,offset[1]+iter_cmpt) 
                                     for zv in range(-offset[2]-2*iter_cmpt,offset[2]+2*iter_cmpt) if [xv, yv, zv] != [0, 0, 0]]
-        print '...Classifier prediction'
-        coord_positive_saved, fname_seg_tmp = predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, idx2process, list_offset, path_output)
 
-        z_pos_pred = np.array([coord[2] for coord in coord_positive_saved])
-        number_no_detection = nz - len(np.unique(z_pos_pred))
-        print '# of slices without pos after prediction #' + str(iter_cmpt) + ': ' + str(number_no_detection) + '/' + str(nz) + ' (' + str(round(float(100.0 * (number_no_detection)) / nz, 2)) + '%)\n'
+        print '... Classifier prediction'
+        coord_positive_saved, fname_seg_tmp, number_no_detection = predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, idx2process, list_offset, path_output, verbose)
+
+        print '... # of slices without pos after prediction #' + str(iter_cmpt) + ': ' + str(number_no_detection) + '/' + str(nz) + ' (' + str(round(float(100.0 * (number_no_detection)) / nz, 2)) + '%)\n'
 
         iter_cmpt += 1
 
@@ -447,6 +454,65 @@ def post_processing(im_data, fname_seg_tmp, model, offset, max_iter, threshold, 
     input_image.setFileName(fname_output)
     input_image.save()
 
+
+def compute_error(fname_centerline, fname_gold_standard):
+
+    im_pred = Image(fname_centerline)
+    im_true = Image(fname_gold_standard)
+
+    nx, ny, nz, nt, px, py, pz, pt = im_true.dim
+
+    count_slice, count_no_detection = 0, 0, 0
+    mse_dist = []
+    for z in range(im_true.dim[2]):
+        if np.sum(im_pred.data[:,:,z]):
+            if np.sum(im_true.data[:,:,z]):
+                x_true, y_true = [np.where(im_true.data[:,:,z] > 0)[i][0] for i in range(len(np.where(im_true.data[:,:,z] > 0)))]
+                x_pred, y_pred = [np.where(im_pred.data[:,:,z] > 0)[i][0] for i in range(len(np.where(im_pred.data[:,:,z] > 0)))]
+                
+                dist = ((x_true-x_pred)*px)**2 + ((y_true-y_pred)*py)**2
+                mse_dist.append(dist)
+               
+                count_slice += 1
+        else:
+            count_no_detection += 1
+    
+    print '\n# of slices not detected: ' + str(count_no_detection) + '/' + str(nz) + ' (' + str(round(100.0 * (count_no_detection) / nz, 2)) + '%)'
+    print 'Accuracy of centerline detection (MSE) = ' + str(np.round(sqrt(sum(mse_dist)/float(count_slice)), 2)) + ' mm'
+    print 'Max move between prediction and groundtruth = ' + str(np.round(max(mse_dist),2)) + ' mm'
+
+def plot_centerline(fname_input, fname_centerline, fname_gold_standard):
+
+    im = Image(fname_input)
+    im_pred = Image(fname_centerline)
+    im_true = Image(fname_gold_standard)
+
+    nx, ny, nz, nt, px, py, pz, pt = im_true.dim
+
+    # Middle S-I slice
+    slice_middle_S_I = im_true.data[:,:,int(nz)/2]
+    x_middle_S_I = np.where(slice_middle_S_I==1)[0][0]
+
+    slice_display = im.data[x_middle_S_I,:,:]
+
+    zz, y_true, y_pred = [], [], [], []
+    for z in range(nz):
+        if np.sum(im_pred.data[:,:,z]) and np.sum(im_true.data[:,:,z]):
+            y_pred.append(np.where(im_pred.data[:,:,z] > 0)[1][0])
+            y_true.append(np.where(im_true.data[:,:,z] > 0)[1][0])
+            zz.append(z)
+
+    fig = plt.figure(figsize=(15,15))
+    ax = plt.subplot(1, 1, 1)
+
+    ax.imshow(np.rot90(np.fliplr(slice_display)),cmap=plt.get_cmap('gray'))
+    plt.scatter(y_true, zz, c='Blue')
+    plt.scatter(y_pred, zz, c='Orange')
+
+    ax.set_axis_off()
+    plt.show()
+
+
 def get_parser():
     # Initialize parser
     parser = Parser(__file__)
@@ -454,10 +520,16 @@ def get_parser():
     # Mandatory arguments
     parser.usage.set_description("This program takes as input an anatomic image and outputs a binary image with the spinal cord centerline/segmentation.")
     parser.add_option(name="-i",
-                      type_value="image_nifti",
-                      description="input image.",
+                      type_value="folder",
+                      description="Folder containing testing images and the segmentation",
                       mandatory=True,
-                      example="t2.nii.gz")
+                      example="/Volumes/data_processing/bdeleener/machine_learning/large_nobrain_nopad/")
+
+    parser.add_option(name="-d",
+                      type_value="file",
+                      description="Dictionary containing fname of testing images",
+                      mandatory=True,
+                      example="/Volumes/data_processing/bdeleener/machine_learning/filemanager_large_nobrain_nopad/datasets.pbz2")
 
     parser.add_option(name="-c",
                       type_value="multiple_choice",
@@ -470,28 +542,14 @@ def get_parser():
                       description="Path output",
                       mandatory=True,
                       default_value='',
-                      example="'/Users/chgroc/data/centerline_detection/results3D/")
+                      example="/Users/chgroc/data/spine_detection/results3D/")
 
-    parser.add_option(name="-r",
-                      type_value="multiple_choice",
-                      description="remove temporary files.",
-                      mandatory=False,
-                      example=['0', '1'],
-                      default_value='1')
-
-    parser.add_option(name="-v",
-                      type_value="multiple_choice",
-                      description="Verbose. 0: nothing, 1: basic, 2: extended.",
-                      mandatory=False,
-                      example=['0', '1', '2'],
-                      default_value='1')
-
-    parser.add_option(name='-qc',
-                      type_value='multiple_choice',
-                      description='Output images for quality control.',
-                      mandatory=False,
-                      example=['0', '1'],
-                      default_value='0')
+    parser.add_option(name="-n",
+                      type_value="int",
+                      description="Number of images to process. Set '-n -1' to process all available images",
+                      mandatory=True,
+                      default_value='-1',
+                      example="3")
 
     return parser
 
@@ -500,14 +558,30 @@ if __name__ == "__main__":
     parser = get_parser()
     arguments = parser.parse(sys.argv[1:])
 
-    fname_model = '/Users/chgroc/data/spine_detection/model_0-001_0-5_recall_rbf/SVM_train'
+    print '\n**** Hard Coded ****'
+    print '- path to model'
+    print '- path to trial'
+    print '- extraction function'
+    print '- patch size'
+    print '- initial_resolution'
+    print '- initial_list_offset'
+    print '- offset'
+    print '- max_iter'
+    print '- verbose'
+    print '********************'
+
+
+    print '\nTODO: Imposer une limite dans la recherche du voisinage a la premiere iteration'
+
+    # Classifier model
+    fname_model = '/Users/chgroc/data/spine_detection/model_0-001_0-5_recall/LinearSVM_train'
     model_svm = Classifier_svm()
     print '\nLoading model...'
     model_svm.load(fname_model)
     print '...\n'
 
     # Find threshold value from training
-    fname_trial = '/Users/chgroc/data/spine_detection/results_0-001_0-5_recall_rbf/SVM_trials.pkl'
+    fname_trial = '/Users/chgroc/data/spine_detection/results_0-001_0-5_recall/LinearSVM_trials.pkl'
     with open(fname_trial) as outfile:    
         trial = pickle.load(outfile)
         outfile.close()
@@ -516,22 +590,82 @@ if __name__ == "__main__":
     idx_best_params = loss_list.index(min(loss_list))
     threshold = trial[idx_best_params]['result']['thrsh']
 
+    # Feature function
     feature_fct = extract_hog_feature
-    patch_size = 32
-
-    fname_input = arguments['-i']
-    im_data = Image(fname_input)
-    # intensity normalization
-    im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
-
-    folder_output = sct.slash_at_the_end(arguments['-ofolder'], slash=1)
-
-    initial_resolution = [3, 3, 10]
-    list_offset = [[xv, yv, zv] for xv in range(-3,3) for yv in range(-3,3) for zv in range(-5,5) if [xv, yv, zv] != [0, 0, 0]]
-    print 'Run Initial prediction based on mathematical morphology'
-    fname_seg = prediction_init(im_data, model_svm, initial_resolution, list_offset, 
-                threshold, feature_fct, patch_size, folder_output, verbose=0)
     
-    offset = [0,0,4]
-    max_iter = 5
-    post_processing(im_data, fname_seg, model_svm, offset, max_iter, threshold, feature_fct, patch_size, folder_output)
+    #Patch and grid size
+    patch_size = 32
+    initial_resolution = [3, 3, 10]
+    initial_list_offset = [[xv, yv, zv] for xv in range(-2,2) for yv in range(-2,2) for zv in range(-10,10) if [xv, yv, zv] != [0, 0, 0]]
+    offset = [1,1,4]
+    max_iter = 3
+    verbose = 0
+
+    # Load Dict
+    with bz2.BZ2File(arguments['-d'], 'rb') as f:
+        datasets_dict = pickle.load(f)
+        f.close()
+
+    # Testing fname images
+    dataset_path = sct.slash_at_the_end(str(arguments['-i']), slash=1)
+    fname_testing_raw_images = datasets_dict['testing']['raw_images']
+    fname_testing_gold_images = datasets_dict['testing']['gold_images']
+    path_fname_images = [dataset_path + f[0] for f in fname_testing_raw_images]
+    path_fname_images_seg = [dataset_path + f[0] for f in fname_testing_gold_images]
+    print '\nDataset path: ' + dataset_path
+
+    # Nb images to process
+    nb_images_process = arguments['-n']
+    if nb_images_process < 0 or nb_images_process > len(path_fname_images):
+        nb_images_process = len(path_fname_images)
+    print '# of images to process: ' + str(nb_images_process)
+
+    # Output Folder
+    folder_output = sct.slash_at_the_end(arguments['-ofolder'], slash=1)
+    print 'Output Folder: ' + folder_output
+
+    mean_err_list, max_move_list = [], []
+    for n in range(nb_images_process):
+
+        fname_input = path_fname_images[n]
+        im_data = Image(fname_input)
+
+        tick = time.time()
+
+        im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
+
+        print '\nRun Initial patch-based prediction'
+        fname_seg = prediction_init(im_data, model_svm, initial_resolution, initial_list_offset, 
+                    threshold, feature_fct, patch_size, folder_output, verbose=verbose)
+        
+        print '\nRun Post Processing'
+        post_processing(im_data, fname_seg, model_svm, offset, max_iter, threshold, feature_fct, patch_size, folder_output, verbose=verbose)
+
+        print '\nProcessing time: ' + str(round(time.time() - tick,2)) + 's'
+
+        print '\nCompute Error'
+        fname_gold_standard = folder_output + (fname_input.split('/')[-1]).split('.nii.gz')[0] + '_centerline.nii.gz'
+        fname_mask_viewer = folder_output + (fname_input.split('/')[-1]).split('.nii.gz')[0] + '_mask_viewer.nii.gz'
+        if not os.path.isfile(fname_gold_standard):
+            if not os.path.isfile(fname_mask_viewer):
+                sct.run('sct_propseg -i ' + fname_input + ' -c ' + arguments['-c'] + ' -ofolder '+  folder_output + ' -centerline-binary -init-centerline viewer')
+            else:
+                sct.run('sct_propseg -i ' + fname_input + ' -c ' + arguments['-c'] + ' -ofolder '+  folder_output + ' -centerline-binary -init-centerline ' + fname_mask_viewer)
+        fname_centerline = folder_output + (fname_input.split('/')[-1]).split('.nii.gz')[0] + '_cord_prediction_end.nii.gz'
+        mean_err, max_move = compute_error(fname_centerline, fname_gold_standard)
+        mean_err_list.append(mean_err)
+        max_move_list.append(max_move)
+        plot_centerline(fname_input, fname_centerline, fname_gold_standard)
+
+        print 'Input Image: ' + fname_input
+        print 'Centerline Manual: ' + fname_gold_standard
+        print 'Centerline Predicted: ' + fname_centerline
+        print '\n*****************************************************\n'
+
+    print '\nMean mse list:'
+    print mean_err_list
+    print 'Avg (+/- std) = ' + str(round(np.mean(mean_err_list),2)) + ' (+/-' + str(round(np.std(mean_err_list),2)) + ')\n'
+
+    print '\nMax move list:'
+    print max_move_list
+    print 'Avg (+/- std) = ' + str(round(np.mean(max_move_list),2)) + ' (+/-' + str(round(np.std(max_move_list),2)) + ')\n'
