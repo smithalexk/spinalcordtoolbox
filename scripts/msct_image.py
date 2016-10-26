@@ -733,6 +733,7 @@ class Image(object):
         if coordi is not None:
             coordi = np.asarray(coordi)
             number_of_coordinates = coordi.shape[0]
+
             num_c = 5000
             result_temp = np.empty(shape=(0, 3))
 
@@ -743,7 +744,7 @@ class Image(object):
                 coordi_phys = np.transpose(coord_origin + dot_result)
                 result_temp = np.concatenate((result_temp, coordi_phys), axis=0)
 
-            coordi_temp = coordi[int(number_of_coordinates / num_c) * num_c:-1, :]
+            coordi_temp = coordi[int(number_of_coordinates / num_c) * num_c:, :]
             coordi_pix = np.transpose(coordi_temp)
             coordi_phys = np.transpose(coord_origin + np.dot(m_p2f_transfo, coordi_pix))
 
@@ -751,6 +752,7 @@ class Image(object):
             coordi_phys_list = coordi_phys.tolist()
 
             return coordi_phys_list
+
         """
         if coordi != None:
             coordi_phys = transpose(self.coord_origin + dot(self.m_p2f_transfo, transpose(asarray(coordi))))
@@ -769,7 +771,6 @@ class Image(object):
 
         :return:
         """
-
         m_p2f = self.hdr.get_sform()
         m_p2f_transfo = m_p2f[0:3,0:3]
         m_f2p_transfo = np.linalg.inv(m_p2f_transfo)
