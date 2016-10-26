@@ -23,6 +23,9 @@ try:
 except:
     import pickle
 
+from msct_image import Image
+
+
 rcParams['legend.fontsize'] = 10
 
 
@@ -201,6 +204,103 @@ def printProgressReportTrain(fname_pkl='', fname_trial=''):
     print progress(pklfile)   
 
 
+def plotIntensityStandardization(path_data):
+
+    list_filename = [path_data + f for f in os.listdir(path_data) if f.endswith('.nii.gz')]
+    list_filename_cor = [path_data + f for f in os.listdir(path_data) if f.endswith('_cor.nii.gz')]
+    list_filename_seg = [path_data + f for f in os.listdir(path_data) if f.endswith('_seg.nii.gz')]
+    list_filename_init = [path_data + f.split('_seg.nii.gz')[0] + '.nii.gz' for f in os.listdir(path_data) if f.endswith('_seg.nii.gz')]
+    # list_filename_init = list(set(list_filename)-set(list_filename_cor+list_filename_seg))
+
+    # Overview of data
+    f = plt.figure(figsize=(15,15))
+    b = 50   # n bins
+    ax1 = f.add_subplot(2,2,1)
+    y_list_before = []
+    bincenters_list_before = []
+    for i, fname in enumerate(list_filename_init):
+        im = Image(fname)
+        im_seg = Image(list_filename_seg[i])
+
+        data = im.data
+        data_seg = im_seg.data
+        data = (data[np.where(data_seg==1)]).flatten()
+
+        y,binEdges=np.histogram(data,bins=b)
+        bincenters = 0.5*(binEdges[1:]+binEdges[:-1])
+        y = y * 1.0 / np.max(y)
+        plt.plot(bincenters,y,'-')
+        y_list_before.append(y)
+        bincenters_list_before.append(bincenters)
+
+    plt.title('Before Intensity Standardization', y=1.08)
+    plt.axis([0,1,0,1])
+    plt.tick_params(axis='x', which='both', bottom='off', top='off', labelbottom='off')
+    plt.ylabel('Probability')
+    plt.xlabel('Normalized Intensity Histogram for all subjects')
+
+    f.add_subplot(2,2,2)
+    y_list_after = []
+    bincenters_list_after = []
+    for i, fname in enumerate(list_filename_cor):
+        im = Image(fname)
+        im_seg = Image(list_filename_seg[i])
+
+        data = im.data
+        data_seg = im_seg.data
+        data = (data[np.where(data_seg==1)]).flatten()
+
+        # data = im.data.flatten()
+        y,binEdges=np.histogram(data,bins=b)
+        bincenters = 0.5*(binEdges[1:]+binEdges[:-1])
+        y = y * 1.0 / np.max(y)
+        plt.plot(bincenters,y,'-')
+        y_list_after.append(y)
+        bincenters_list_after.append(bincenters)
+
+    plt.title('After Intensity Standardization', y=1.08)
+    plt.axis([0,1,0,1])
+    plt.tick_params(axis='x', which='both', bottom='off', top='off', labelbottom='off')
+    plt.ylabel('Probability')
+    plt.xlabel('Normalized Intensity Histograms for all subjects')
+
+    ax2 = f.add_subplot(2,2,3)
+    y_before_mean = sum(y_list_before) / len(y_list_before)
+    y_before_std = np.std(y_list_before,axis=0)
+    plt.plot(bincenters_list_before[0],y_before_mean,'-', linewidth=3.0)
+    plt.plot(bincenters_list_before[0], y_before_std+y_before_mean,'b--')
+    plt.plot(bincenters_list_before[0], y_before_mean-y_before_std,'b--')
+
+    # plt.title('Before Intensity Standardization')
+    plt.legend(['avg', 'std'])
+    plt.axis([0,1,0,1])
+    ax2.plot([1.07, 1.07], [0, 2.2], 'k--', transform=ax2.transAxes, clip_on=False, linewidth=3)
+    plt.tick_params(axis='x', which='both', bottom='off', top='off', labelbottom='off')
+    plt.ylabel('Probability')
+    plt.xlabel('Normalized Intensity Histograms averaged across all subjects')
+
+    f.add_subplot(2,2,4)
+    y_after_mean = sum(y_list_after) / len(y_list_after)
+    y_after_std = np.std(y_list_after,axis=0)
+    plt.plot(bincenters_list_after[0], y_after_mean,'-', linewidth=3.0)
+    plt.plot(bincenters_list_after[0], y_after_std+y_after_mean,'b--')
+    plt.plot(bincenters_list_after[0], y_after_mean-y_after_std,'b--')
+
+    # plt.title('After Intensity Standardization')
+    plt.legend(['avg', 'std'])
+    plt.axis([0,1.5,0,1])
+    plt.tick_params(axis='x', which='both', bottom='off', top='off', labelbottom='off')
+    plt.ylabel('Probability')
+    plt.xlabel('Normalized Intensity Histogram averaged across all subjects')
+    
+
+    plt.suptitle('Normalized Intensity Histograms of cropped images', fontsize=16)
+    plt.show()
+    # # f.savefig(prefixe + 'overview_intensity_standardization.png')
+    # # plt.close()
+
+
+
 
 fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/CNN_eval_5120256_000000000000.pkl'
 # plot_training_keras_results(fname_trial)
@@ -212,13 +312,16 @@ model_hyperparam = {'C': [1, 1000],
                     'probability': True,
                     'class_weight': (None, 'balanced')}
 
-# path_data='/Users/chgroc/data/spine_detection/'
-# list_trial = ['results_0-001_0-5_roc_poly/', 'results_0-001_0-5_roc/', 'results_0-001_0-5_recall_rbf/',
-#                 'results_0-001_0-5_recall/', 'results_0-001_0-5_precision_rbf/', 'results_0-001_0-5_precision/']
-# for t in list_trial:
-#     fname_trial = path_data + t + 'SVM_trials.pkl'
-#     plot_param_stats(fname_trial, model_hyperparam)
-#     if os.path.exists(fname_trial):
-#         printProgressReportTrain(fname_pkl='', fname_trial=fname_trial)
+path_data='/Users/chgroc/data/spine_detection/'
+list_trial = ['results_0-001_0-5_roc/', 'results_0-001_0-5_recall/',  'results_0-001_0-5_precision/', 'results/']
+for t in list_trial:
+    fname_trial = path_data + t + 'LinearSVM_trials.pkl'
+    # plot_param_stats(fname_trial, model_hyperparam)
+    if os.path.exists(fname_trial):
+        printProgressReportTrain(fname_pkl='', fname_trial=fname_trial)
+
 fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_20480256_000000000000.pkl'
 
+
+# path_irs = '/Users/chgroc/data/spine_detection/irs/'
+# plotIntensityStandardization(path_irs)
