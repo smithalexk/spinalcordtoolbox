@@ -145,7 +145,8 @@ model_hyperparam = {'C': [1, 1000],
                     'probability': True,
                     'class_weight': (None, 'balanced')}
 
-fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_20480256_000000000000.pkl'
+#fname_trial = '/Users/benjamindeleener/data/machine_learning/result_cnn_t2s/CNN_eval_2569472_000000000000.pkl'
+fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_28160256_000000000000.pkl'
 
 #plot_param_stats(fname_trial, model_hyperparam)
 plot_training_keras_results(fname_trial)
