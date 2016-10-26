@@ -16,6 +16,7 @@ import sys
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 import numpy as np
+import os
 
 try:
     import cPickle as pickle
@@ -140,10 +141,80 @@ def plot_param_stats(fname_trial, param_dict):
 
     plt.show()
 
+def progress(stats):
+    """Report progress information, return a string."""
+    s = ''
+
+    if 'n_train' in stats and 'n_test' in stats:
+        s += 'Training dataset: ' + str(stats['n_train'] + stats['n_test']) + ' samples (' + str(stats['n_train_pos'] + stats['n_test_pos']) + ' positive)\n'
+        s += '... ' + str(round(float(stats['n_train']*100)/(stats['n_train'] + stats['n_test']), 3)) + '% for training HyperOpt\n'
+        s += '... ' + str(round(float(stats['n_test']*100)/(stats['n_train'] + stats['n_test']), 3)) + '% for testing HyperOpt\n'
+
+    if 'n_train' in stats:
+        s += str(stats['n_train']) + " train samples (" + str(stats['n_train_pos']) + " positive)\n"
+        if stats['total_fit_time'] != 0:
+            s += 'Training time: ' + str(stats['total_fit_time']) + ' s (' + str(round(float(stats['n_train'])/stats['total_fit_time'],3)) + ' samples/sec)\n'
+
+    if 'n_test' in stats:
+        s += str(stats['n_test']) + " test samples (" + str(stats['n_test_pos']) + " positive)\n"
+        s += "accuracy: " + str(stats['accuracy']) + "\n"
+        s += "precision: " + str(stats['precision']) + "\n"
+        s += "recall: " + str(stats['recall']) + "\n"
+        s += "roc: " + str(stats['roc']) + "\n"
+        if stats['total_predict_time'] != 0:
+            s += 'Prediction time: ' + str(stats['total_predict_time']) + ' s (' + str(round(float(stats['n_test'])/stats['total_predict_time'],3)) + ' samples/sec)\n'
+
+    return s
+
+
+def printProgressReportTrain(fname_pkl='', fname_trial=''):
+
+    if fname_trial != '':
+
+        with open(fname_trial) as outfile:
+            trial = pickle.load(outfile)
+            outfile.close()
+
+        loss_list = [trial[i]['result']['loss'] for i in range(len(trial))]
+        eval_time_list = [trial[i]['result']['eval_time'] for i in range(len(trial))]
+        idx_best_params = loss_list.index(min(loss_list))
+        best_params = trial[idx_best_params]['misc']['vals']
+
+        print '\nTriral ID: ' + str(idx_best_params)
+        print 'params: '
+        print best_params
+        print ' '
+
+        path_data, filename = os.path.split(fname_trial)
+        model_name, rest = filename.split('trials.pkl')
+
+        fname_pkl_prefix = model_name + 'eval_' + str(idx_best_params).zfill(6)
+        fname_pkl = [path_data + '/' + filename for filename in os.listdir(path_data) if filename.startswith(fname_pkl_prefix)][0]
+
+    print fname_pkl
+    print ' '
+
+    with open(fname_pkl) as outfile:
+        pklfile = pickle.load(outfile)
+        outfile.close()
+
+    print progress(pklfile)
+
+
 model_hyperparam = {'C': [1, 1000],
-                    'kernel': 'linear',
+                    'kernel': ('sigmoid', 'poly', 'rbf'),
+                    'gamma': [0, 20],
                     'probability': True,
                     'class_weight': (None, 'balanced')}
+
+# path_data='/Users/chgroc/data/spine_detection/'
+# list_trial = ['results_0-001_0-5_roc_poly/', 'results_0-001_0-5_roc/', 'results_0-001_0-5_recall_rbf/',
+#                 'results_0-001_0-5_recall/', 'results_0-001_0-5_precision_rbf/', 'results_0-001_0-5_precision/']
+# for t in list_trial:
+#     fname_trial = path_data + t + 'SVM_trials.pkl'
+#     plot_param_stats(fname_trial, model_hyperparam)
+#     if os.path.exists(fname_trial):
+#         printProgressReportTrain(fname_pkl='', fname_trial=fname_trial)
 
 #fname_trial = '/Users/benjamindeleener/data/machine_learning/result_cnn_t2s/CNN_eval_2569472_000000000000.pkl'
 fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_28160256_000000000000.pkl'
