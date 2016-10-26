@@ -764,20 +764,15 @@ class Trainer():
             print model_hyperparam_hyperopt
             print ' '
 
-
             # Objective function
             def hyperopt_train_test(params):
-
-                # Create minibatch iterators for hyperopt training and testing
-                minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt, label_prepared_train_hyperopt, 
-                                                                train_minibatch_size, self.training_dataset)
-
-                self.model.set_params(params) # Update model hyperparam with params provided by hyperopt library algo
+                # Update model hyperparam with params provided by hyperopt library algo
+                self.model.set_params(params)
 
                 # UPDATE FROM BENJAMIN
                 # TO REMOVE OR DO BETTER
-                self.model.load('/home/neuropoly/data/model_new_pipeline_large/CNN_000028160256_000000_weights')
-                limit_begin = 28160256
+                #self.model.load('/home/neuropoly/data/model_new_pipeline_large/CNN_000028160256_000000_weights')
+                limit_begin = 0  # 28160256
 
                 stats = {'n_train': 0, 'n_train_pos': 0,
                         'n_test': 0, 'n_test_pos': 0,
@@ -788,13 +783,19 @@ class Trainer():
                 
                 cmpt = 0
                 for n_epoch in range(self.param_training['number_of_epochs']):
+                    # Create minibatch iterators for hyperopt training and testing
+                    minibatch_iterator_train = self.iter_minibatches_trainer(coord_prepared_train_hyperopt,
+                                                                             label_prepared_train_hyperopt,
+                                                                             train_minibatch_size,
+                                                                             self.training_dataset)
+
                     for i, data in enumerate(minibatch_iterator_train):
                         X_train = np.array(data['patches_feature'])
                         y_train = np.array(data['patches_label'])
 
                         stats['n_train'] += X_train.shape[0]
                         stats['n_train_pos'] += sum(y_train)
-                        print X_train.shape[0]
+                        #print X_train.shape[0]
 
                         if stats['n_train'] <= limit_begin:
                             print stats['n_train']

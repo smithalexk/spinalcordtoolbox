@@ -224,10 +224,14 @@ my_file_manager = FileManager(dataset_path='/Volumes/folder_shared-1/benjamin/ma
 # training_dataset, testing_dataset = my_file_manager.decompose_dataset(model_path)
 # my_file_manager.explore()
 
-results_path = '/home/neuropoly/data/result_new_pipeline_large/'
-model_path = '/home/neuropoly/data/model_new_pipeline_large/'
-# data_path = '/Users/chgroc/data/spine_detection/data/'
-data_filemanager_path = '/home/neuropoly/data/filemanager_large_nobrain_nopad/'
+#results_path = '/home/neuropoly/data/result_new_pipeline_large/'
+#model_path = '/home/neuropoly/data/model_new_pipeline_large/'
+#dataset_path = '/home/neuropoly/data/large_nobrain_nopad/'
+#data_filemanager_path = '/home/neuropoly/data/filemanager_large_nobrain_nopad/'
+results_path = '/home/neuropoly/data/result_cnn_t2s/'
+model_path = '/home/neuropoly/data/model_cnn_t2s/'
+dataset_path = '/home/neuropoly/data/data_t2s/'
+data_filemanager_path = '/home/neuropoly/data/filemanager_t2s/'
 
 params_cnn = {'patch_size': [32, 32],
               'number_of_channels': 1,
@@ -242,10 +246,17 @@ cnn_model = {'model_name': 'CNN', 'model': KerasConvNet(params_cnn),
 methode_normalization_1={'methode_normalization_name':'histogram', 'param':{'cutoffp': (1, 99), 'landmarkp': [10, 20, 30, 40, 50, 60, 70, 80, 90], 'range': [0, 255]}}
 methode_normalization_2={'methode_normalization_name':'percentile', 'param':{'range': [0, 255]}}
 
-param_training = {'data_path_local': '/home/neuropoly/data/large_nobrain_nopad/',
-                  'number_of_epochs': 50, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
+param_training = {'data_path_local': dataset_path,
+                  'number_of_epochs': 10, 'patch_size': [32, 32], 'ratio_patch_per_img': 1.0,
                   'minibatch_size_train': 256, 'minibatch_size_test': 256,  # number for CNN, None for SVM
-                  'hyperopt': {'algo': tpe.suggest, 'nb_eval': 10, 'fct': roc_auc_score, 'eval_factor': 10000, 'ratio_dataset_eval': 0.25, 'ratio_img_eval': 0.25}}
+                  'hyperopt': {'algo': tpe.suggest,  # Grid Search algorithm
+                               'nb_eval': 10,  # Nb max of param test
+                               'fct': roc_auc_score,  # Objective function
+                               'eval_factor': 10000,  # Evaluation rate
+                               'ratio_dataset_eval': 0.25,
+                               # Ratio of training dataset dedicated to hyperParam validation
+                               'ratio_img_eval': 0.25,  # Ratio of patch per validation image
+                               'ratio_img_train': 1.0}}
 
 ### Attention .json et .pbz2 : modif a faire dans Trainer.__init__
 my_trainer = Trainer(data_filemanager_path=data_filemanager_path,
@@ -259,8 +270,9 @@ my_trainer = Trainer(data_filemanager_path=data_filemanager_path,
                      model_path=model_path)
 
 coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, 1.0)
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
+#coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
 # my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
-# my_trainer.predict(coord_prepared_test, label_prepared_test)
+#my_trainer.model.load(model_path + XXX)
+#my_trainer.run_prediction(coord_prepared_test, label_prepared_test, fname_out='', stats=None)
