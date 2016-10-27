@@ -174,7 +174,7 @@ def printProgressReportTrain(fname_pkl='', fname_trial=''):
 
     if fname_trial != '':
 
-        with open(fname_trial) as outfile:    
+        with open(fname_trial) as outfile:
             trial = pickle.load(outfile)
             outfile.close()
 
@@ -197,7 +197,7 @@ def printProgressReportTrain(fname_pkl='', fname_trial=''):
     print fname_pkl
     print ' '
 
-    with open(fname_pkl) as outfile:    
+    with open(fname_pkl) as outfile:
         pklfile = pickle.load(outfile)
         outfile.close()
 
@@ -312,10 +312,10 @@ model_hyperparam = {'C': [1, 1000],
                     'probability': True,
                     'class_weight': (None, 'balanced')}
 
-path_data='/Users/chgroc/data/spine_detection/'
-list_trial = ['results_0-001_0-5_roc/', 'results_0-001_0-5_recall/',  'results_0-001_0-5_precision/', 'results/']
+path_data='/Users/chgroc/data/spine_detection/results2D/'
+list_trial = ['results_0-001_0-5_precision_rbf/', 'results_0-001_0-5_recall_rbf/',  'results_0-001_0-5_roc_poly/']
 for t in list_trial:
-    fname_trial = path_data + t + 'LinearSVM_trials.pkl'
+    fname_trial = path_data + t + 'SVM_trials.pkl'
     # plot_param_stats(fname_trial, model_hyperparam)
     if os.path.exists(fname_trial):
         printProgressReportTrain(fname_pkl='', fname_trial=fname_trial)
@@ -325,3 +325,18 @@ fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cn
 
 # path_irs = '/Users/chgroc/data/spine_detection/irs/'
 # plotIntensityStandardization(path_irs)
+
+# path_data='/Users/chgroc/data/spine_detection/'
+# list_trial = ['results_0-001_0-5_roc_poly/', 'results_0-001_0-5_roc/', 'results_0-001_0-5_recall_rbf/',
+#                 'results_0-001_0-5_recall/', 'results_0-001_0-5_precision_rbf/', 'results_0-001_0-5_precision/']
+# for t in list_trial:
+#     fname_trial = path_data + t + 'SVM_trials.pkl'
+#     plot_param_stats(fname_trial, model_hyperparam)
+#     if os.path.exists(fname_trial):
+#         printProgressReportTrain(fname_pkl='', fname_trial=fname_trial)
+
+#fname_trial = '/Users/benjamindeleener/data/machine_learning/result_cnn_t2s/CNN_eval_2569472_000000000000.pkl'
+fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_28160256_000000000000.pkl'
+
+#plot_param_stats(fname_trial, model_hyperparam)
+# plot_training_keras_results(fname_trial)
