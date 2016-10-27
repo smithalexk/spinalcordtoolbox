@@ -916,7 +916,7 @@ class Trainer():
                 Timer(),
                 ' ', Percentage(),
                 ' ', Bar(),
-                ' ', ETA()], max_value=n_epoch*sum([len(coord_prepared_train[str(i)]) for i in coord_prepared_train]))
+                ' ', ETA()], max_value=self.param_training['number_of_epochs']*sum([len(coord_prepared_train[str(i)]) for i in coord_prepared_train]))
         pbar.start()
         for n_epoch in range(self.param_training['number_of_epochs']):
             for i, data in enumerate(minibatch_iterator_train):
