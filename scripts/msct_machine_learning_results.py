@@ -170,10 +170,14 @@ def progress(stats):
     return s
 
 
-def printProgressReportTrain(fname_pkl='', fname_trial=''):
+def printProgressReport(fname_test, fname_trial, path_output):
 
-    if fname_trial != '':
+    print '\n#########################################################'
+    stg_trial, stg_test = '', ''
 
+    if os.path.isfile(fname_trial):
+
+        stg_trial += '\nFname Trial file: ' + fname_trial
         with open(fname_trial) as outfile:
             trial = pickle.load(outfile)
             outfile.close()
@@ -183,10 +187,10 @@ def printProgressReportTrain(fname_pkl='', fname_trial=''):
         idx_best_params = loss_list.index(min(loss_list))
         best_params = trial[idx_best_params]['misc']['vals']
 
-        print '\nTriral ID: ' + str(idx_best_params)
-        print 'params: '
-        print best_params
-        print ' '
+        stg_trial += '\nTriral ID: ' + str(idx_best_params)
+        stg_trial += 'params: '
+        stg_trial += str(best_params)
+        stg_trial += ' '
 
         path_data, filename = os.path.split(fname_trial)
         model_name, rest = filename.split('trials.pkl')
@@ -194,14 +198,34 @@ def printProgressReportTrain(fname_pkl='', fname_trial=''):
         fname_pkl_prefix = model_name + 'eval_' + str(idx_best_params).zfill(6)
         fname_pkl = [path_data + '/' + filename for filename in os.listdir(path_data) if filename.startswith(fname_pkl_prefix)][0]
 
-    print fname_pkl
-    print ' '
+        with open(fname_pkl) as outfile:
+            train_report = pickle.load(outfile)
+            outfile.close()
 
-    with open(fname_pkl) as outfile:
-        pklfile = pickle.load(outfile)
-        outfile.close()
+        stg_trial += progress(train_report)
 
-    print progress(pklfile)   
+    else:
+        stg_trial += '\nNo Trial file available!'  
+
+    if os.path.isfile(fname_test):
+
+        stg_test += '\nFname Test file: ' + fname_test
+
+        with open(fname_test) as outfile:
+            test_report = pickle.load(outfile)
+            outfile.close()
+
+        stg_test += progress(test_report)
+    else:
+        stg_test += '\nNo Test file available!'  
+     
+    print stg_trial
+    print stg_test
+
+    with open(path_output + 'report_trial', 'w') as f:
+        f.write(stg_trial)
+    with open(path_output + 'report_test', 'w') as f:
+        f.write(stg_test)
 
 
 def plotIntensityStandardization(path_data):
@@ -300,43 +324,43 @@ def plotIntensityStandardization(path_data):
     # # plt.close()
 
 
-
-
+############################################################################################################################
+#                                           Benjamin Part
+############################################################################################################################
 fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/CNN_eval_5120256_000000000000.pkl'
 # plot_training_keras_results(fname_trial)
-
-
-model_hyperparam = {'C': [1, 1000],
-                    'kernel': ('sigmoid', 'poly', 'rbf'),
-                    'gamma': [0, 20],
-                    'probability': True,
-                    'class_weight': (None, 'balanced')}
-
-path_data='/Users/chgroc/data/spine_detection/results2D/'
-list_trial = ['results_0-001_0-5_precision_rbf/', 'results_0-001_0-5_recall_rbf/',  'results_0-001_0-5_roc_poly/']
-for t in list_trial:
-    fname_trial = path_data + t + 'SVM_trials.pkl'
-    # plot_param_stats(fname_trial, model_hyperparam)
-    if os.path.exists(fname_trial):
-        printProgressReportTrain(fname_pkl='', fname_trial=fname_trial)
-
-fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_20480256_000000000000.pkl'
-
-
-# path_irs = '/Users/chgroc/data/spine_detection/irs/'
-# plotIntensityStandardization(path_irs)
-
-# path_data='/Users/chgroc/data/spine_detection/'
-# list_trial = ['results_0-001_0-5_roc_poly/', 'results_0-001_0-5_roc/', 'results_0-001_0-5_recall_rbf/',
-#                 'results_0-001_0-5_recall/', 'results_0-001_0-5_precision_rbf/', 'results_0-001_0-5_precision/']
-# for t in list_trial:
-#     fname_trial = path_data + t + 'SVM_trials.pkl'
-#     plot_param_stats(fname_trial, model_hyperparam)
-#     if os.path.exists(fname_trial):
-#         printProgressReportTrain(fname_pkl='', fname_trial=fname_trial)
 
 #fname_trial = '/Users/benjamindeleener/data/machine_learning/result_cnn_t2s/CNN_eval_2569472_000000000000.pkl'
 fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_28160256_000000000000.pkl'
 
 #plot_param_stats(fname_trial, model_hyperparam)
 # plot_training_keras_results(fname_trial)
+fname_trial = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_eval_20480256_000000000000.pkl'
+
+
+############################################################################################################################
+#                                           charley Part
+############################################################################################################################
+
+path_data='/Users/chgroc/data/spine_detection/results2D/'
+
+for fold in os.listdir(path_data):
+
+    if fold.startswith('results'):
+        result_folder = path_data+fold + '/'
+        if os.path.isfile(result_folder + 'SVM_trials.pkl'):
+            fname_trial = result_folder + 'SVM_trials.pkl'
+            fname_test = result_folder + 'SVM_test.pkl'
+        else:
+            fname_trial = result_folder + 'LinearSVM_trials.pkl'
+            fname_test = result_folder + 'LinearSVM_test.pkl'
+
+        printProgressReport(fname_test=fname_test, fname_trial=fname_trial, path_output=result_folder)
+
+
+
+# path_irs = '/Users/chgroc/data/spine_detection/irs/'
+# plotIntensityStandardization(path_irs)
+
+
+
