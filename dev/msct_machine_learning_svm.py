@@ -134,8 +134,8 @@ def center_of_patch_equal_one(data):
 # training_dataset, testing_dataset = my_file_manager.decompose_dataset()
 # my_file_manager.explore()
 
-results_path = '/Users/chgroc/data/spine_detection/results2D/results_t2s_linear_001/'
-model_path = '/Users/chgroc/data/spine_detection/results2D/model_t2s_linear_001/'
+results_path = '/Users/chgroc/data/spine_detection/results2D/results_t2s_linear_002/'
+model_path = '/Users/chgroc/data/spine_detection/results2D/model_t2s_linear_002/'
 # data_path = '/Users/chgroc/data/spine_detection/data/'
 data_filemanager_path = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/'
 
@@ -173,9 +173,9 @@ my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     param_training=param_training, 
                     results_path=results_path, model_path=model_path)
 
-coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, 0.01)
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
+coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, 0.05)
+coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
 my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
-# my_trainer.predict(coord_prepared_test, label_prepared_test)
+my_trainer.predict(coord_prepared_test, label_prepared_test)
