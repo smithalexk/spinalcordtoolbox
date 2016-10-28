@@ -186,11 +186,13 @@ def printProgressReport(fname_test, fname_trial, path_output):
         eval_time_list = [trial[i]['result']['eval_time'] for i in range(len(trial))]
         idx_best_params = loss_list.index(min(loss_list))
         best_params = trial[idx_best_params]['misc']['vals']
+        threshold = trial[idx_best_params]['result']['thrsh']
 
         stg_trial += '\nTriral ID: ' + str(idx_best_params)
-        stg_trial += 'params: '
+        stg_trial += '\nparams: '
         stg_trial += str(best_params)
-        stg_trial += ' '
+        stg_trial += '\nThreshold = ' + str(threshold)
+        stg_trial += '\n'
 
         path_data, filename = os.path.split(fname_trial)
         model_name, rest = filename.split('trials.pkl')
@@ -209,7 +211,7 @@ def printProgressReport(fname_test, fname_trial, path_output):
 
     if os.path.isfile(fname_test):
 
-        stg_test += '\nFname Test file: ' + fname_test
+        stg_test += '\nFname Test file: ' + fname_test + '\n'
 
         with open(fname_test) as outfile:
             test_report = pickle.load(outfile)
