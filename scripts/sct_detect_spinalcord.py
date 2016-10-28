@@ -231,7 +231,7 @@ def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, f
 
             last_coord_positive = [[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2]] for coord in classes_predictions]
             coord_positive.update(last_coord_positive)
-            coord_positive_saved.extend([[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2], y_pred[coord, 1]] for coord in classes_predictions])
+            coord_positive_saved.extend([[current_coordinates[coord][0], current_coordinates[coord][1], current_coordinates[coord][2], 1] for coord in classes_predictions])
         else:
             last_coord_positive = []
 
@@ -249,7 +249,7 @@ def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, f
         input_image.data[coord[0], coord[1], coord[2]] = 1
     # path_input, file_input, ext_input = sct.extract_fname(fname_input)
     # fname_seg_tmp = path_output + file_input + "_cord_prediction_seg_tmp" + ext_input
-    fname_seg_tmp = path_output + "_cord_prediction_seg_tmp.nii.gz"
+    fname_seg_tmp = path_output + "_seg_tmp.nii.gz"
     input_image.setFileName(fname_seg_tmp)
     input_image.save()
 
@@ -420,8 +420,7 @@ def shortest_path_graph(fname_seg, path_output):
     for z in range(im.dim[2]):
         if z in centerline_coord:
             input_image.data[centerline_coord[z][0], centerline_coord[z][1], z] = 1
-    # path_input, file_input, ext_input = sct.extract_fname(fname_input)
-    fname_output_tmp = path_output + "_cord_prediction_reg_tmp.nii.gz"
+    fname_output_tmp = path_output + "_reg_tmp.nii.gz"
     input_image.setFileName(fname_output_tmp)
     input_image.save()
 
@@ -626,14 +625,18 @@ if __name__ == "__main__":
     #Patch and grid size
     patch_size = 32
     initial_resolution = [3, 3, 10]
-    initial_list_offset = [[xv, yv, zv] for xv in range(1) for yv in range(1) for zv in range(-5,5) if [xv, yv, zv] != [0, 0, 0]]
+    initial_list_offset = [[xv, yv, zv] for xv in range(-1,1) for yv in range(-1,1) for zv in range(-5,5) if [xv, yv, zv] != [0, 0, 0]]
     offset = [1,1,4]
     max_iter = 3
 
     if '-v' in arguments:
         verbose = int(arguments['-v'])
-    else:
-        verbose = 0
+
+    if '-r' in arguments:
+        bool_remove = int(arguments['-r'])
+
+    if '-eval' in arguments:
+        bool_eval = int(arguments['-eval'])
 
     # Input Image
     fname_input = arguments['-i']
@@ -644,7 +647,8 @@ if __name__ == "__main__":
 
     # Output Folder
     fname_output = arguments['-o']
-    folder_output, subject_name = os.path.split(fname_output)
+    folder_output, subject_name_out = os.path.split(fname_output)
+    folder_output += '/'
     prefixe_output = subject_name.split('.nii.gz')[0]
     print '\nOutput Folder: ' + folder_output
 
@@ -654,34 +658,36 @@ if __name__ == "__main__":
 
     print '\nRun Initial patch-based prediction'
     fname_seg = prediction_init(im_data, model, initial_resolution, initial_list_offset, 
-                                 threshold, feature_fct, patch_size, prefixe_output, verbose)
+                                 threshold, feature_fct, patch_size, folder_output + prefixe_output, verbose)
     
     print '\nRun Post Processing'
     post_processing(im_data, fname_seg, model, offset, max_iter,
-                        threshold, feature_fct, patch_size, prefixe_output, fname_output, verbose)
+                        threshold, feature_fct, patch_size, folder_output + prefixe_output, fname_output, verbose)
 
     print '\nProcessing time: ' + str(round(time.time() - tick,2)) + 's'
 
-    if 'eval' in arguments:
+    if bool_eval:
         print '\nCompute Error'
-        fname_gold_standard = prefixe_output + '_centerline.nii.gz'
-        fname_mask_viewer = prefixe_output + '_mask_viewer.nii.gz'
+        fname_gold_standard = folder_output + prefixe_output + '_centerline.nii.gz'
+        print fname_gold_standard
+        fname_mask_viewer = folder_output + prefixe_output + '_mask_viewer.nii.gz'
+        print fname_mask_viewer
         if not os.path.isfile(fname_gold_standard):
             if not os.path.isfile(fname_mask_viewer):
-                sct.run('sct_propseg -i ' + fname_input + ' -c ' + arguments['-c'] + ' -ofolder '+  folder_data + ' -centerline-binary -init-centerline viewer')
+                sct.run('sct_propseg -i ' + fname_input + ' -c ' + arguments['-c'] + ' -ofolder '+  folder_output + ' -centerline-binary -init-centerline viewer')
             else:
-                sct.run('sct_propseg -i ' + fname_input + ' -c ' + arguments['-c'] + ' -ofolder '+  folder_data + ' -centerline-binary -init-centerline ' + fname_mask_viewer)
+                sct.run('sct_propseg -i ' + fname_input + ' -c ' + arguments['-c'] + ' -ofolder '+  folder_output + ' -centerline-binary -init-centerline ' + fname_mask_viewer)
         mean_err, max_move = compute_error(fname_output, fname_gold_standard)
-        plot_centerline(fname_input, fname_output, fname_gold_standard, prefixe_output)
+        plot_centerline(fname_input, fname_output, fname_gold_standard, folder_output + prefixe_output)
 
         print 'Input Image: ' + fname_input
         print 'Centerline Manual: ' + fname_gold_standard
-        print 'Centerline Predicted: ' + folder_output + fname_output
+        print 'Centerline Predicted: ' + fname_output
 
-    if '-r' in arguments:
-        os.remove(prefixe_output + '_reg_tmp.nii.gz')
-        os.remove(prefixe_output + '_reg_tmp.nii.gz')
+    if bool_remove:
+        os.remove(folder_output + prefixe_output + '_reg_tmp.nii.gz')
+        os.remove(folder_output + prefixe_output + '_seg_tmp.nii.gz')
         if 'eval' in arguments:
             os.remove(fname_gold_standard)
             os.remove(fname_mask_viewer)
-            os.remove(prefixe_output + '_seg.nii.gz')
+            os.remove(folder_output + prefixe_output + '_seg.nii.gz')
