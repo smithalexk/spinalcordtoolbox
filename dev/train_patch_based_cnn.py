@@ -274,5 +274,6 @@ coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_train
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
 # my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
-#my_trainer.model.load(model_path + XXX)
+#my_trainer.create_model()
+#my_trainer.model.load(model_path + "CNN_000015360256_000000_weights")
 #my_trainer.run_prediction(coord_prepared_test, label_prepared_test, fname_out='', stats=None)
