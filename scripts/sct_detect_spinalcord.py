@@ -135,11 +135,11 @@ class Classifier_svm(BaseEstimator):
         self.clf = clf
 
         self.params = clf.get_params()
-        print self.params
+        print self.clf.get_params()
 
     def set_params(self, params):
         self.clf.set_params(**params)
-        print self.clf.get_params()
+        print params
         self.params = params
 
 def extract_hog_feature(patch_list, param=None):
@@ -279,7 +279,6 @@ def prediction_init(im_data, model, initial_resolution, list_offset, threshold, 
 
     print '... Initial prediction:\n'
     tot_pos_pred = 0
-    number_no_detection = 0
     for slice_number in range(0, nz, initial_resolution[2]):
         print '... ... slice #' + str(slice_number) + '/' + str(nz)
         patches = extract_patches_from_image(im_data, initial_coordinates, patch_size=patch_size, slice_of_interest=slice_number, verbose=0)
@@ -293,10 +292,8 @@ def prediction_init(im_data, model, initial_resolution, list_offset, threshold, 
         classes_predictions = np.where(y_pred[:, 1] > threshold)[0].tolist()
         print '... ... # of pos prediction: ' + str(len(classes_predictions)) + '\n'
         tot_pos_pred += len(classes_predictions)
-        if not len(classes_predictions):
-            number_no_detection += 1
 
-        if slice_number % 20 == 0 and verbose > 0:
+        if slice_number % 4 == 0 and verbose > 0:
             plot_2D_detections(im_data, slice_number, initial_coordinates, classes_predictions)
         
         coord_positive.update([[initial_coordinates[coord][0], initial_coordinates[coord][1], slice_number] for coord in classes_predictions])
@@ -305,7 +302,6 @@ def prediction_init(im_data, model, initial_resolution, list_offset, threshold, 
         nb_voxels_explored += len(patches)
     
     print '\n... # of voxels explored = ' + str(nb_voxels_explored) + '/' + str(nb_voxels_image) + ' (' + str(round(100.0 * nb_voxels_explored / nb_voxels_image, 2)) + '%)'
-    print '... # of slice without pos: ' + str(number_no_detection) + '/' + str(int(float(nz)/initial_resolution[2])) + ' (' + str(round(float((number_no_detection)*initial_resolution[2]*100)/nz,2)) + '%)\n'
     last_coord_positive = coord_positive
 
     coord_positive_saved, fname_seg_tmp, number_no_detection = predict_along_centerline(im_data, model, patch_size, 
@@ -574,6 +570,11 @@ def get_parser():
                       mandatory=True,
                       example=0.5)
 
+    parser.add_option(name="-param",
+                      type_value="str",
+                      description="Path to Grid search parameters dict",
+                      mandatory=True)
+
     parser.add_option(name="-eval",
                       type_value="int",
                       description="Choice to do (1) or not do (0) the validation step: compute error + plot 2D centerline",
@@ -603,6 +604,7 @@ if __name__ == "__main__":
 
     # Classifier model
     fname_model = arguments['-imodel'].split('.')[0]
+    print fname_model.split('/')[-1]
     if 'SVM' in fname_model.split('/')[-1]:
         feature_fct = extract_hog_feature
         model = Classifier_svm()
@@ -615,19 +617,16 @@ if __name__ == "__main__":
     threshold = arguments['-threshold']
     print '\n TODO: Donner un dictionnaire avec le chemin vers le modele et la classe correspondante + Thresh'
 
-    print '\n**** Hard Coded ****'
-    print '- patch size'
-    print '- initial_resolution'
-    print '- initial_list_offset'
-    print '- offset'
-    print '- max_iter'
-    print '********************'
+    path_params = arguments['-param']
+    with open(path_params) as outfile:    
+        params = pickle.load(outfile)
+        outfile.close()
     #Patch and grid size
-    patch_size = 32
-    initial_resolution = [3, 3, 10]
-    initial_list_offset = [[xv, yv, zv] for xv in range(-1,1) for yv in range(-1,1) for zv in range(-5,5) if [xv, yv, zv] != [0, 0, 0]]
-    offset = [1,1,4]
-    max_iter = 3
+    patch_size = params['patch_size']
+    initial_resolution = params['initial_resolution']
+    initial_list_offset = params['initial_list_offset']
+    offset = params['offset']
+    max_iter = params['max_iter']
 
     if '-v' in arguments:
         verbose = int(arguments['-v'])
