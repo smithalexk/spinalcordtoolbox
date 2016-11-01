@@ -114,6 +114,130 @@ def display_patches(patches, nb_of_subplots=None, nb_of_figures_to_display=0):
         plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
         plt.show()
 
+try:
+    from keras.models import Sequential
+    from keras.layers.core import Dense, Activation, Dropout, Flatten
+    from keras.layers.convolutional import Convolution2D, MaxPooling2D
+    from keras.layers.normalization import BatchNormalization
+    from keras.optimizers import SGD, Adadelta
+    from keras.utils import np_utils
+except ImportError:
+    pass
+
+class KerasConvNet(Sequential):
+    def __init__(self, params):
+        super(KerasConvNet, self).__init__()
+
+        if 'patch_size' in params:
+            self.patch_size = params['patch_size']  # must be a list of two elements
+        else:
+            self.patch_size = [32, 32]
+
+        if 'number_of_channels' in params:
+            self.number_of_channels = params['number_of_channels']
+        else:
+            self.number_of_channels = 1
+
+        if 'number_of_classes' in params:
+            self.number_of_classes = params['number_of_classes']
+        else:
+            self.number_of_classes = 2
+
+        if 'batch_size' in params:
+            self.batch_size = params['batch_size']
+        else:
+            self.batch_size = 256
+
+        if 'weight_class' in params:
+            self.weight_class = params['weight_class']
+        else:
+            self.weight_class = [1.0, 1.0]
+
+        # must be a list of list corresponding to the number of layers, depth and features.
+        # For example: [[32, 32], [64, 64]] means that there are two depth,
+        # two layers per depth and 32 and 64 features for each layer/depth, respectively
+        if 'depth_layers_features' in params:
+            self.number_of_layer_per_depth = params['number_of_features']
+        else:
+            self.number_of_layer_per_depth = [[32, 32], [64, 64]]
+
+        if 'number_of_feature_dense' in params:
+            self.number_of_feature_dense = params['number_of_feature_dense']
+        else:
+            self.number_of_feature_dense = 256
+
+        if 'activation_function' in params:
+            self.activation_function = params['activation_function']
+        else:
+            self.activation_function = 'relu'
+
+        if 'loss' in params:
+            self.loss = params['loss']
+        else:
+            self.loss = 'categorical_crossentropy'
+
+        #self.create_model()
+
+    def create_model(self):
+        for d in range(len(self.number_of_layer_per_depth)):
+            for l in range(len(self.number_of_layer_per_depth[d])):
+                if d == 0 and l == 0:
+                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3, border_mode='valid', input_shape=(self.number_of_channels, self.patch_size[0], self.patch_size[1]), name='input_layer'))
+                elif d != 0 and l == 0:
+                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3, border_mode='valid', name='conv_'+str(d)+'_'+str(l)))
+                else:
+                    self.add(Convolution2D(self.number_of_layer_per_depth[d][l], 3, 3, name='conv_'+str(d)+'_'+str(l)))
+                self.add(Activation(self.activation_function, name='activation_'+str(d)+'_'+str(l)))
+            self.add(MaxPooling2D(pool_size=(2, 2), name='max-pooling_'+str(d)))
+            self.add(Dropout(0.25, name='dropout_'+str(d)))
+
+        self.add(Flatten(name='flatten'))
+        self.add(Dense(self.number_of_feature_dense, name='dense_before_final'))
+        self.add(Activation(self.activation_function, name='activation_final'))
+        self.add(Dropout(0.5, name='dropout_final'))
+
+        self.add(Dense(self.number_of_classes, name='dense_final'))
+        self.add(Activation('softmax', name='softmax_activation'))
+
+        ada = Adadelta(lr=1.0, rho=0.95, epsilon=1e-08)
+        self.compile(loss=self.loss, optimizer=ada)
+
+    def save(self, fname_out):
+        super(KerasConvNet, self).save(fname_out + '_model.h5')
+        self.save_weights(fname_out + '_weights.h5')
+
+    def load(self, fname_in):
+        self.load_weights(fname_in + '.h5')
+
+    def train(self, X, y):
+        if X.ndim == 3:
+            X = np.expand_dims(X, axis=1)
+        y = np_utils.to_categorical(y, nb_classes=self.number_of_classes)
+        self.train_on_batch(X, y, class_weight=self.weight_class)
+
+    def predict(self, X):
+        if X.ndim == 3:
+            X = np.expand_dims(X, axis=1)
+        y_pred = super(KerasConvNet, self).predict(X, batch_size=self.batch_size)
+        return y_pred
+
+    def set_params(self, params):
+        if 'depth_layers_features' in params:
+            self.number_of_layer_per_depth = params['number_of_features']
+        if 'number_of_feature_dense' in params:
+            self.number_of_feature_dense = params['number_of_feature_dense']
+        if 'activation_function' in params:
+            self.activation_function = params['activation_function']
+        if 'loss' in params:
+            self.loss = params['loss']
+        """self.layers = []
+        self.outputs = []
+        self.inbound_nodes = []
+        self.outbound_nodes = []
+        self.built = False
+        self._flattened_layers = None"""
+        self.create_model()
+
 class Classifier_svm(BaseEstimator):
     def __init__(self, params={}):
 
@@ -893,6 +1017,14 @@ if __name__ == "__main__":
         model = Classifier_svm()
     else:
         feature_fct = extract_patch_feature
+        params_cnn = {'patch_size': [32, 32],
+                      'number_of_channels': 1,
+                      'batch_size': 128,
+                      'number_of_features': [[32, 32], [64, 64]],
+                      'loss': 'categorical_crossentropy'
+                      }
+        model = KerasConvNet(params_cnn)
+        model.create_model()
         print 'Benjamin: comment initialises tu ton CNN?'
     print '\nLoading model...'
     model.load(fname_model)
