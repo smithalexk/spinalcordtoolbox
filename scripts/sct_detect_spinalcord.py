@@ -45,6 +45,7 @@ from scipy.spatial import distance
 from math import sqrt
 import bz2
 from scipy import ndimage
+from scipy.spatial import distance
 
 def extract_patches_from_image(image_file, patches_coordinates, patch_size=32, slice_of_interest=None, verbose=1):
     result = []
@@ -190,30 +191,43 @@ def plot_detections_along_z(im_data, coord, coord_clean=[]):
         z_pos_pred_clean = np.unique(np.array([cc[2] for cc in coord_clean]))
         coord_clean = sorted(coord_clean, key = lambda x: int(x[2]))
 
-    for zz in range(im_data.shape[2]):
-        if zz in z_pos_pred and not zz in z_pos_pred_clean:
+        z_diff = []
+        for z in z_pos_pred:
+            c_pred = [c for c in coord if c[2]==z]
+            c_pred_clean = [c for c in coord_clean if c[2]==z]
+            if len(c_pred)-len(c_pred_clean):
+                print c_pred
+                print c_pred_clean
+                z_diff.append(z)
+                print ' '
+
+        for zz in range(im_data.shape[2]):
+            if zz in z_diff:
+                fig1 = plt.figure()
+                ax1 = plt.subplot(1, 1, 1)
+                ax1.imshow(im_data[:,:,zz],cmap=plt.get_cmap('gray'))
+
+                for ccc in [cc for cc in coord if cc[2]==zz]:
+                    plt.scatter(ccc[1], ccc[0], c='Red', s=10)
+                for ccc in [cc for cc in coord_clean if cc[2]==zz]:
+                    plt.scatter(ccc[1], ccc[0], c='Green', s=10)
+
+                ax1.set_axis_off()
+                plt.show()
+
+    else:
+        for zz in range(im_data.shape[2]):
             fig1 = plt.figure()
             ax1 = plt.subplot(1, 1, 1)
             ax1.imshow(im_data[:,:,zz],cmap=plt.get_cmap('gray'))
 
-            for ccc in [cc for cc in coord if cc[2]==zz]:
-                plt.scatter(ccc[1], ccc[0], c='Red', s=10)
+            if zz in z_pos_pred:
+                for ccc in [cc for cc in coord if cc[2]==zz]:
+                    plt.scatter(ccc[1], ccc[0], c='Green', s=10)
 
             ax1.set_axis_off()
             plt.show()
 
-        elif zz in z_pos_pred and zz in z_pos_pred_clean:
-            fig1 = plt.figure()
-            ax1 = plt.subplot(1, 1, 1)
-            ax1.imshow(im_data[:,:,zz],cmap=plt.get_cmap('gray'))
-
-            for ccc in [cc for cc in coord if cc[2]==zz]:
-                plt.scatter(ccc[1], ccc[0], c='Red', s=10)
-            for ccc in [cc for cc in coord_clean if cc[2]==zz]:
-                plt.scatter(ccc[1], ccc[0], c='Green', s=10)
-
-            ax1.set_axis_off()
-            plt.show()
 
 def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, feature_fct, threshold, idx_2_process, list_offset, path_output, verbose=0):
 
@@ -281,7 +295,7 @@ def predict_along_centerline(im_data, model, patch_size, coord_positive_saved, f
 
     if verbose == 4:
         plot_detections_along_z(im_data.data, coord_positive_saved)
-        pickle.dump(coord_positive_saved, open(path_output + 'coord_pos_tmp.pkl', "wb"))
+    pickle.dump(coord_positive_saved, open(path_output + 'coord_pos_tmp.pkl', "wb"))
 
     # write results
     input_image = im_data.copy()
@@ -418,10 +432,10 @@ def prediction_init(im_data, model, initial_resolution, initial_resize, list_off
                                                                                         range(0, nz), list_offset, 
                                                                                         path_output, verbose)
 
-    # print '\n... Time to predict cord location: ' + str(np.round(time.time() - time_prediction)) + ' seconds'
-    # print '... # of slice without pos: ' + str(number_no_detection) + '/' + str(nz) + ' (' + str(round(float(100.0 * (number_no_detection)) / nz, 2)) + '%)\n'
+    print '\n... Time to predict cord location: ' + str(np.round(time.time() - time_prediction)) + ' seconds'
+    print '... # of slice without pos: ' + str(number_no_detection) + '/' + str(nz) + ' (' + str(round(float(100.0 * (number_no_detection)) / nz, 2)) + '%)\n'
 
-    # return fname_seg_tmp
+    return fname_seg_tmp
 
 def shortest_path_graph(fname_seg, path_output):
 
@@ -608,6 +622,7 @@ def compute_error(fname_centerline, fname_gold_standard):
     print 'Max move between prediction and groundtruth = ' + str(np.round(max(mse_dist),2)) + ' mm'
 
     return sqrt(sum(mse_dist)/float(count_slice)), max(mse_dist)
+
 def plot_centerline(fname_input, fname_centerline, fname_gold_standard, folder_output):
 
     im = Image(fname_input)
@@ -669,7 +684,6 @@ def gen_points(moves, beg_x, beg_y, end_x, end_y):
 
         times_to_move+=1
 
-
 def spiral_coord(im, im_size_x, im_size_y):
     
     coord_init = (int((im_size_x-1)/2), int((im_size_y-1)/2))
@@ -720,7 +734,7 @@ def plot_cOm(path_coord_file, im_data):
     ax1.set_axis_off()
     plt.show()
 
-def remove_outlier(fname_seg, ratio_to_check, path_coord_file, data_init=None):
+def remove_outlier(fname_seg, ratio_to_check, path_output, path_coord_file='', data_init=None):
 
     im = Image(fname_seg)
     im_data = im.data
@@ -763,30 +777,31 @@ def remove_outlier(fname_seg, ratio_to_check, path_coord_file, data_init=None):
             image_graph[z]['coords_cOm'] = None
             image_graph[z]['coords_elem'] = None
 
-    
-    from scipy.spatial import distance
-
     nb_slice_ref = int(len(list_z_pos)*ratio_to_check)
 
     if nb_slice_ref > 1:
         for i, z in enumerate(list_z_pos):
-            if z - nb_slice_ref >= 0 and z + nb_slice_ref < im_data.shape[2]:
+            if z - nb_slice_ref >= 0:
                 coord_sub = [image_graph[zz]['coords_cOm'] for zz in range(z-nb_slice_ref, z) if image_graph[zz]['coords_cOm']]
-                coord_sup = [image_graph[zz]['coords_cOm'] for zz in range(z+1,z+nb_slice_ref) if image_graph[zz]['coords_cOm']]
                 c0m_sub = ndimage.measurements.center_of_mass(np.array(coord_sub))
+
+            if z + nb_slice_ref < im_data.shape[2]:
+                coord_sup = [image_graph[zz]['coords_cOm'] for zz in range(z+1,z+nb_slice_ref) if image_graph[zz]['coords_cOm']]
                 c0m_sup = ndimage.measurements.center_of_mass(np.array(coord_sup))
+
+            if z - nb_slice_ref >= 0 and z + nb_slice_ref < im_data.shape[2] and len(coord_sup) and len(coord_sub):
                 image_graph[z]['confidence_z'] = [0.5/(1+distance.euclidean(im.transfo_pix2phys([list(cur)+[z]]), im.transfo_pix2phys([list(c0m_sup)+[z]]))) + 0.5/(1+distance.euclidean(im.transfo_pix2phys([list(cur)+[z]]), im.transfo_pix2phys([list(c0m_sub)+[z]]))) for cur in image_graph[z]['coords_obj_co']]
 
-            elif z - nb_slice_ref >= 0 and z + nb_slice_ref > im_data.shape[2]:
-                coord_sub = [image_graph[zz]['coords_cOm'] for zz in range(z-nb_slice_ref, z) if image_graph[zz]['coords_cOm']]
-                c0m_sub = ndimage.measurements.center_of_mass(np.array(coord_sub))
+            elif z - nb_slice_ref >= 0 and z + nb_slice_ref > im_data.shape[2] and len(coord_sub):
+                # coord_sub = [image_graph[zz]['coords_cOm'] for zz in range(z-nb_slice_ref, z) if image_graph[zz]['coords_cOm']]
+                # c0m_sub = ndimage.measurements.center_of_mass(np.array(coord_sub))
                 image_graph[z]['confidence_z'] = [1/(1+distance.euclidean(im.transfo_pix2phys([list(cur)+[z]]), im.transfo_pix2phys([list(c0m_sub)+[z]]))) for cur in image_graph[z]['coords_obj_co']]
             
-            elif z - nb_slice_ref < 0 and z + nb_slice_ref <= im_data.shape[2]:
-                coord_sup = [image_graph[zz]['coords_cOm'] for zz in range(z+1,z+nb_slice_ref) if image_graph[zz]['coords_cOm']]
-                c0m_sup = ndimage.measurements.center_of_mass(np.array(coord_sup))
+            elif z - nb_slice_ref < 0 and z + nb_slice_ref <= im_data.shape[2] and len(coord_sup):
+                # coord_sup = [image_graph[zz]['coords_cOm'] for zz in range(z+1,z+nb_slice_ref) if image_graph[zz]['coords_cOm']]
+                # c0m_sup = ndimage.measurements.center_of_mass(np.array(coord_sup))
                 image_graph[z]['confidence_z'] = [1/(1+distance.euclidean(im.transfo_pix2phys([list(cur)+[z]]), im.transfo_pix2phys([list(c0m_sup)+[z]]))) for cur in image_graph[z]['coords_obj_co']]
-            
+                
             else:
                 print 'aie'
                 print z
@@ -803,7 +818,6 @@ def remove_outlier(fname_seg, ratio_to_check, path_coord_file, data_init=None):
         else:
             image_graph[z]['remove'] = [0]*len(image_graph[z]['coords_elem'])
 
-
     new_coord = []
     for z in list_z_pos:
         for i in range(len(image_graph[z]['remove'])):
@@ -811,12 +825,23 @@ def remove_outlier(fname_seg, ratio_to_check, path_coord_file, data_init=None):
                 new_coord.append(image_graph[z]['coords_elem'][i])
     
     new_coord = [item for sublist in new_coord for item in sublist]
+    pickle.dump(new_coord, open(path_output + 'coord_pos_tmp.pkl', "wb"))
 
     if verbose == 5:
         with open(path_coord_file) as outfile:    
             old_coord = pickle.load(outfile)
             outfile.close()
         plot_detections_along_z(data_init, old_coord, new_coord)
+
+    input_image = im.copy()
+    input_image.data *= 0
+    for coord in new_coord:
+        input_image.data[coord[0], coord[1], coord[2]] = 1
+    fname_seg_tmp = path_output + "_seg_r_tmp.nii.gz"
+    input_image.setFileName(fname_seg_tmp)
+    input_image.save()
+
+    return fname_seg_tmp
 
 
 def get_parser():
@@ -949,8 +974,35 @@ if __name__ == "__main__":
                                  threshold, feature_fct, patch_size, folder_output + prefixe_output, verbose)
     
 
-    # remove_outlier('/Users/chgroc/data/spine_detection/results3D/e23185_t2_seg_tmp.nii.gz', 0.2, folder_output + 'e23185_t2coord_pos_tmp.pkl', im_data.data)
+    iter_cmpt = 1
+    while iter_cmpt < max_iter:
 
+        fname_seg = remove_outlier(fname_seg, 0.2, folder_output + prefixe_output, folder_output + prefixe_output + 'coord_pos_tmp.pkl', im_data.data)
+
+        x_centerline, y_centerline, z_centerline = smooth_centerline(fname_seg, algo_fitting='nurbs', nurbs_pts_number=3000)[:3]
+        nurbs_coord = [[int(round(xx)),int(round(yy)),int(zz)] for (xx, yy, zz) in zip(x_centerline, y_centerline, z_centerline) if zz >= 0]
+        pickle.dump(nurbs_coord, open(folder_output + prefixe_output + 'coord_nurbs_tmp.pkl', "wb"))
+
+        with open(folder_output + prefixe_output + 'coord_pos_tmp.pkl') as outfile:    
+            coord_pos = pickle.load(outfile)
+            outfile.close()
+        with open(folder_output + prefixe_output + 'coord_nurbs_tmp.pkl') as outfile:    
+            coord_nurbs = pickle.load(outfile)
+            outfile.close()
+
+        list_offset = [[xv, yv, zv] for xv in range(-offset[0]-iter_cmpt,offset[0]+iter_cmpt) 
+                                    for yv in range(-offset[1]-iter_cmpt,offset[1]+iter_cmpt) 
+                                    for zv in range(-offset[2]-2*iter_cmpt,offset[2]+2*iter_cmpt) if [xv, yv, zv] != [0, 0, 0]]
+        coord_positive_saved, fname_seg_tmp, number_no_detection = predict_along_centerline(im_data, model, patch_size, 
+                                                                                            coord_pos + coord_nurbs,
+                                                                                            feature_fct, threshold, range(0, im_data.dim[2]),
+                                                                                            list_offset,
+                                                                                            folder_output + prefixe_output,
+                                                                                            verbose)
+
+        iter_cmpt += 1
+    
+    plot_detections_along_z(im_data.data, coord_positive_saved)
 
     # print '\nRun Post Processing'
     # post_processing(im_data, fname_seg, model, offset, max_iter,

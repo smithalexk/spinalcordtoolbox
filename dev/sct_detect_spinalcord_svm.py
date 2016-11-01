@@ -10,7 +10,7 @@ import os
 # path_dataset = '/Volumes/data_processing/bdeleener/machine_learning/data_t2s/'
 path_data_dict = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_large_nobrain_nopad/datasets.pbz2'
 path_dataset = '/Volumes/data_processing/bdeleener/machine_learning/large_nobrain_nopad/'
-nb_images_process = 1              # Set it to -1 for processing all testing images
+nb_images_process = -1              # Set it to -1 for processing all testing images
 path_folder_output = '/Users/chgroc/data/spine_detection/results3D/'
 contrast = 't2'
 path_model = '/Users/chgroc/data/spine_detection/results2D/model_t2_linear_001/LinearSVM_train'
@@ -18,7 +18,7 @@ path_model = '/Users/chgroc/data/spine_detection/results2D/model_t2_linear_001/L
 threshold = '/Users/chgroc/data/spine_detection/results2D/results_t2_linear_001/LinearSVM_trials.pkl'
 int_eval = 1                        # To make or not the error computation
 int_remove_tmp = 0                  # To remove or not temporary files
-int_verbose = 5                     # 1 for step1, 2 for step2 ...etc.
+int_verbose = 0                     # 1 for step1, 2 for step2 ...etc.
 
 ####################################################################################################################
 #       Run Script
