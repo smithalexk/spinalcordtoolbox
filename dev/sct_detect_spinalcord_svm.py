@@ -6,17 +6,19 @@ import os
 ####################################################################################################################
 #   User Case
 
-path_data_dict = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/datasets.pbz2'
-path_dataset = '/Volumes/data_processing/bdeleener/machine_learning/data_t2s/'
+# path_data_dict = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/datasets.pbz2'
+# path_dataset = '/Volumes/data_processing/bdeleener/machine_learning/data_t2s/'
+path_data_dict = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_large_nobrain_nopad/datasets.pbz2'
+path_dataset = '/Volumes/data_processing/bdeleener/machine_learning/large_nobrain_nopad/'
 nb_images_process = 1              # Set it to -1 for processing all testing images
 path_folder_output = '/Users/chgroc/data/spine_detection/results3D/'
 contrast = 't2'
-path_model = '/Users/chgroc/data/spine_detection/results2D/model_t2s_linear_002/LinearSVM_train'
+path_model = '/Users/chgroc/data/spine_detection/results2D/model_t2_linear_001/LinearSVM_train'
 # threshold = 0.866772426866          # Set a value (float) or Trial path
-threshold = '/Users/chgroc/data/spine_detection/results2D/results_t2s_linear_002/LinearSVM_trials.pkl'
+threshold = '/Users/chgroc/data/spine_detection/results2D/results_t2_linear_001/LinearSVM_trials.pkl'
 int_eval = 1                        # To make or not the error computation
 int_remove_tmp = 0                  # To remove or not temporary files
-int_verbose = 1
+int_verbose = 5                     # 1 for step1, 2 for step2 ...etc.
 
 ####################################################################################################################
 #       Run Script
@@ -50,25 +52,30 @@ if isinstance(threshold, str):
 
 #Patch and grid size
 grid_search_dict_t2={'patch_size':32,
-                    'initial_resolution': [3, 3, 10],
+                    'initial_resolution': [2, 2, 10],
+                    'initial_resize': [0.1, 0.25],
                     'initial_list_offset': [[xv, yv, zv] for xv in range(-1,1) for yv in range(-1,1) for zv in range(-5,5) if [xv, yv, zv] != [0, 0, 0]],
                     'offset': [1,1,4],
                     'max_iter': 3
                     }
-
 grid_search_dict_t2s={'patch_size':32,
-                    'initial_resolution': [10, 10, 1],
+                    'initial_resolution': [8, 8, 1],
                     'initial_list_offset': [[xv, yv, zv] for xv in range(-3,3) for yv in range(-3,3) for zv in range(-3,3) if [xv, yv, zv] != [0, 0, 0]],
                     'offset': [1,1,4],
                     'max_iter': 3}
-pickle.dump(grid_search_dict_t2s, open(path_folder_output + 'grid_search_dict_t2s.pkl', "wb"))
+
+pickle.dump(grid_search_dict_t2, open(path_folder_output + 'grid_search_dict_t2.pkl', "wb"))
+
+# from random import shuffle
+# shuffle(path_fname_images)
+# path_fname_images = [dataset_path + 'e23185_t2.nii.gz']
 
 for f_in in path_fname_images[:nb_images_process]:
 
     cmd = 'python ../scripts/sct_detect_spinalcord.py -i ' + f_in
     cmd += ' -o ' + path_folder_output + (f_in.split('/')[-1]).split('.nii.gz')[0] + '_centerline_pred.nii.gz'
     cmd += ' -c ' + contrast
-    cmd += ' -param ' + path_folder_output + 'grid_search_dict_t2s.pkl'
+    cmd += ' -param ' + path_folder_output + 'grid_search_dict_t2.pkl'
     cmd += ' -imodel ' + path_model
     cmd += ' -eval ' + str(int_eval)
     cmd += ' -r ' + str(int_remove_tmp)
