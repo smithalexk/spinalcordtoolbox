@@ -135,8 +135,8 @@ def center_of_patch_equal_one(data):
 # training_dataset, testing_dataset = my_file_manager.decompose_dataset()
 # my_file_manager.explore()
 
-results_path = '/Users/chgroc/data/spine_detection/results2D/results_t2_rbf_001/'
-model_path = '/Users/chgroc/data/spine_detection/results2D/model_t2_rbf_001/'
+results_path = '/Users/chgroc/data/spine_detection/results2D/results_t2_rbf_002/'
+model_path = '/Users/chgroc/data/spine_detection/results2D/model_t2_rbf_002/'
 # data_path = '/Users/chgroc/data/spine_detection/data/'
 data_filemanager_path = '/Volumes/data_processing/bdeleener/machine_learning/filemanager_large_nobrain_nopad/'
 
@@ -158,12 +158,12 @@ param_training = {'data_path_local': '/Volumes/data_processing/bdeleener/machine
                     'minibatch_size_train': None, # number for CNN, None for SVM
                     'minibatch_size_test': 1000,
                     'hyperopt': {'algo':tpe.suggest,        # Grid Search algorithm
-                                'nb_eval':70,               # Nb max of param test
+                                'nb_eval':10,               # Nb max of param test
                                 'fct': recall_score,       # Objective function
                                 'eval_factor': 1,           # Evaluation rate
                                 'ratio_dataset_eval':0.15,   # Ratio of training dataset dedicated to hyperParam validation
                                 'ratio_img_eval':1.0,       # Ratio of patch per validation image
-                                'ratio_img_train':0.2}}      # Ratio of patch per training image
+                                'ratio_img_train':0.3}}      # Ratio of patch per training image
 
 my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     datasets_dict_fname = 'datasets.pbz2',
@@ -175,8 +175,8 @@ my_trainer = Trainer(data_filemanager_path = data_filemanager_path,
                     results_path=results_path, model_path=model_path)
 
 coord_prepared_train, label_prepared_train = my_trainer.prepare_patches(my_trainer.fname_training_raw_images, 0.01)
-# coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
+coord_prepared_test, label_prepared_test = my_trainer.prepare_patches(my_trainer.fname_testing_raw_images, 1.0)
 
 my_trainer.hyperparam_optimization(coord_prepared_train, label_prepared_train)
 my_trainer.set_hyperopt_train(coord_prepared_train, label_prepared_train)
-# my_trainer.predict(coord_prepared_test, label_prepared_test)
+my_trainer.predict(coord_prepared_test, label_prepared_test)

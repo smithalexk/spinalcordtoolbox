@@ -925,7 +925,6 @@ class Trainer():
 
                 stats['n_train'] += X_train.shape[0]
                 stats['n_train_pos'] += sum(y_train)
-                # print 'Start training for n=' + str(stats['n_train']) + ' (epoch=' + str(n_epoch+1) + ', iteration=' + str(i+1) + ')'
 
                 self.model.train(X_train, y_train)
                 pbar.update(X_train.shape[0])
@@ -980,6 +979,7 @@ class Trainer():
             thrsh_list = [trial[i]['result']['thrsh'] for i in range(len(trial))]
             idx_best_params = loss_list.index(min(loss_list))
             threshold = trial[idx_best_params]['result']['thrsh']
+
             stats['threshold'] = threshold
 
             print '\nStarting Testing...'
@@ -1074,42 +1074,3 @@ class Trainer():
         pickle.dump(stats, open(fname_out_progress, "wb"))
 
         return y_test, y_pred, threshold
-
-    # def test_hist_match(self, fname_raw_images, train=0):
-
-    #     def cstretch(img, r1, r0):
-    #         lmin = float(np.amin(img))
-    #         lmax = float(np.percentile(img, 100))
-    #         anorm = (img - lmin)*(r1 - r0)/(lmax - lmin)
-    #         return anorm
-        
-    #     fname_subj = [fname[0].split('.')[0] for fname in fname_raw_images]
-    #     raw_images = [Image(self.dataset_path + fname + '.nii.gz') for fname in fname_subj]
-    #     seg_images = [Image(self.dataset_path + fname + '_seg.nii.gz') for fname in fname_subj]
-
-    #     if train:
-    #         print '\nContrast Stretching'
-    #         raw_images_cstretch = [cstretch(im.data, 1, 0) for im in raw_images]
-    #         irs = IntensityRangeStandardization(cutoffp=(1, 99), landmarkp=[30, 40, 50, 60, 70], stdrange=(0,1))
-    #         print 'IRS model building...'
-    #         self.irs_model = irs.train(raw_images_cstretch)
-    #         print '...!\n'
-    #         cmpt = 0
-    #     else:
-    #         cmpt = 100
-
-    #     for i, im in enumerate(raw_images):
-    #         print cmpt
-
-    #         im.data = cstretch(im.data, 1, 0)
-    #         im.setFileName(self.results_path + 'irs/' + str(cmpt).zfill(3) + '.nii.gz')
-    #         im.save()
-
-    #         im.data = self.irs_model.transform(im.data)
-    #         im.setFileName(self.results_path + 'irs/' + str(cmpt).zfill(3) + '_cor.nii.gz')
-    #         im.save()
-
-    #         seg_images[i].setFileName(self.results_path + 'irs/' + str(cmpt).zfill(3) + '_seg.nii.gz')
-    #         seg_images[i].save()
-            
-    #         cmpt += 1
