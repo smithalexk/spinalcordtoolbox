@@ -200,7 +200,7 @@ class Image(object):
     """
     def __init__(self, param=None, hdr=None, orientation=None, absolutepath="", dim=None, verbose=1):
         from sct_utils import extract_fname
-        from nibabel import AnalyzeHeader
+        from nibabel import Nifti1Header
 
         # initialization of all parameters
         self.im_file = None
@@ -213,7 +213,7 @@ class Image(object):
         self.dim = None
 
         if hdr is None:
-            hdr = self.hdr = AnalyzeHeader()  # an empty header
+            hdr = self.hdr = Nifti1Header()  # an empty header
         else:
             self.hdr = hdr
 
@@ -733,26 +733,28 @@ class Image(object):
         if coordi is not None:
             coordi = np.asarray(coordi)
             number_of_coordinates = coordi.shape[0]
-
-            num_c = 5000
+            num_c = 100000
             result_temp = np.empty(shape=(0, 3))
 
             for i in range(int(number_of_coordinates / num_c)):
-                coordi_temp = coordi[num_c*i:(i+1)*num_c, :]
+                coordi_temp = coordi[num_c * i:(i + 1) * num_c, :]
                 coordi_pix = np.transpose(coordi_temp)
                 dot_result = np.dot(m_p2f_transfo, coordi_pix)
                 coordi_phys = np.transpose(coord_origin + dot_result)
                 result_temp = np.concatenate((result_temp, coordi_phys), axis=0)
 
-            coordi_temp = coordi[int(number_of_coordinates / num_c) * num_c:, :]
+            if int(number_of_coordinates / num_c) == 0:
+                coordi_temp = coordi
+            else:
+                coordi_temp = coordi[int(number_of_coordinates / num_c) * num_c:, :]
             coordi_pix = np.transpose(coordi_temp)
             coordi_phys = np.transpose(coord_origin + np.dot(m_p2f_transfo, coordi_pix))
 
             coordi_phys = np.concatenate((result_temp, coordi_phys), axis=0)
             coordi_phys_list = coordi_phys.tolist()
+            #print coordi_phys.shape
 
             return coordi_phys_list
-
         """
         if coordi != None:
             coordi_phys = transpose(self.coord_origin + dot(self.m_p2f_transfo, transpose(asarray(coordi))))
@@ -760,7 +762,6 @@ class Image(object):
         else:
             return None
         """
-        
         return np.transpose(self.coord_origin + np.dot(self.m_p2f_transfo, np.transpose(np.asarray(coordi))))
 
     def transfo_phys2pix(self, coordi=None):
@@ -771,6 +772,7 @@ class Image(object):
 
         :return:
         """
+
         m_p2f = self.hdr.get_sform()
         m_p2f_transfo = m_p2f[0:3,0:3]
         m_f2p_transfo = np.linalg.inv(m_p2f_transfo)
@@ -813,14 +815,14 @@ class Image(object):
 
             return coordi_pix_list
 
-    def get_values(self, coordi=None, interpolation_mode=0, boundaries_mode='constant'):
+    def get_values(self, coordi=None, interpolation_mode=0, border='constant'):
         """
         This function returns the intensity value of the image at the position coordi (can be a list of coordinates).
         :param coordi: continuouspix
         :param interpolation_mode: 0=nearest neighbor, 1= linear, 2= 2nd-order spline, 3= 2nd-order spline, 4= 2nd-order spline, 5= 5th-order spline
         :return: intensity values at continuouspix with interpolation_mode
         """
-        return map_coordinates(self.data, coordi, output=np.float32, order=interpolation_mode, mode=boundaries_mode)
+        return map_coordinates(self.data, coordi, output=np.float32, order=interpolation_mode, mode=border)
 
     def get_transform(self, im_ref, mode='affine'):
         aff_im_self = self.im_file.affine
@@ -878,7 +880,7 @@ class Image(object):
 
         return transform
 
-    def interpolate_from_image(self, im_ref, fname_output, interpolation_mode=1):
+    def interpolate_from_image(self, im_ref, fname_output=None, interpolation_mode=1, border='constant'):
         """
         This function interpolates an image by following the grid of a reference image.
         Example of use:
@@ -889,6 +891,8 @@ class Image(object):
         im_input.interpolate_from_image(im_ref, fname_output, interpolation_mode=1)
 
         :param im_ref: reference Image that contains the grid on which interpolate.
+        :param border: Points outside the boundaries of the input are filled according
+        to the given mode ('constant', 'nearest', 'reflect' or 'wrap')
         :return: a new image that has the same dimensions/grid of the reference image but the data of self image.
         """
         nx, ny, nz, nt, px, py, pz, pt = im_ref.dim
@@ -902,7 +906,7 @@ class Image(object):
         # 2. apply transformation on coordinates
 
         coord_im = np.array(self.transfo_phys2continuouspix(physical_coordinates_ref))
-        interpolated_values = self.get_values(np.array([coord_im[:, 0], coord_im[:, 1], coord_im[:, 2]]), interpolation_mode=interpolation_mode)
+        interpolated_values = self.get_values(np.array([coord_im[:, 0], coord_im[:, 1], coord_im[:, 2]]), interpolation_mode=interpolation_mode, border=border)
 
         im_output = Image(im_ref)
         if interpolation_mode == 0:
@@ -910,8 +914,10 @@ class Image(object):
         else:
             im_output.changeType('float32')
         im_output.data = np.reshape(interpolated_values, (nx, ny, nz))
-        im_output.setFileName(fname_output)
-        im_output.save()
+        if fname_output is not None:
+            im_output.setFileName(fname_output)
+            im_output.save()
+        return im_output
 
     def get_slice(self, plane='sagittal', index=None, seg=None):
         """
@@ -1037,6 +1043,8 @@ class Image(object):
             # plt.axis('off')
             fname_png = path_output + self.file_name + suffix + format
             plt.savefig(fname_png, bbox_inches='tight')
+            plt.close(fig)
+
         except RuntimeError, e:
             from sct_utils import printv
             printv('WARNING: your device does not seem to have display feature', self.verbose, type='warning')
@@ -1044,6 +1052,10 @@ class Image(object):
         return fname_png
 
     def save_quality_control(self, plane='sagittal', n_slices=1, seg=None, thr=0, cmap_col='red', format='.png', path_output='./', verbose=1):
+        ori = self.change_orientation('RPI')
+        if seg is not None:
+            ori_seg = seg.change_orientation('RPI')
+
         from sct_utils import printv
         nx, ny, nz, nt, px, py, pz, pt = self.dim
         if plane == 'sagittal':
@@ -1075,7 +1087,79 @@ class Image(object):
             printv('WARNING: your device does not seem to have display feature', self.verbose, type='warning')
             printv(str(e), self.verbose, type='warning')
 
+        self.change_orientation(ori)
+        if seg is not None:
+            seg.change_orientation(ori_seg)
 
+
+def compute_dice(image1, image2, mode='3d', label=1, zboundaries=False):
+    """
+    This function computes the Dice coefficient between two binary images.
+    Args:
+        image1: object Image
+        image2: object Image
+        mode: mode of computation of Dice.
+                3d: compute Dice coefficient over the full 3D volume
+                2d-slices: compute the 2D Dice coefficient for each slice of the volumes
+        label: binary label for which Dice coefficient will be computed. Default=1
+        zboundaries: True/False. If True, the Dice coefficient is computed over a Z-ROI where both segmentations are
+                     present. Default=False.
+
+    Returns: Dice coefficient as a float between 0 and 1. Raises ValueError exception if an error occurred.
+
+    """
+    MODES = ['3d', '2d-slices']
+    if mode not in MODES:
+        raise ValueError('\n\nERROR: mode must be one of these values:' + ',  '.join(MODES))
+
+    dice = 0.0  # default value of dice is 0
+
+    # check if images are in the same coordinate system
+    assert image1.data.shape == image2.data.shape, "\n\nERROR: the data (" + image1.absolutepath + " and " + image2.absolutepath + ") don't have the same size.\nPlease use  \"sct_register_multimodal -i im1.nii.gz -d im2.nii.gz -identity 1\"  to put the input images in the same space"
+
+    # if necessary, change orientation of images to RPI and compute segmentation boundaries
+    if mode == '2d-slices' or (mode == '3d' and zboundaries):
+        # changing orientation to RPI if necessary
+        if image1.orientation != 'RPI':
+            image1_c = image1.copy()
+            image1_c.change_orientation('RPI')
+            image1 = image1_c
+        if image2.orientation != 'RPI':
+            image2_c = image2.copy()
+            image2_c.change_orientation('RPI')
+            image2 = image2_c
+
+        zmin, zmax = 0, image1.data.shape[2]-1
+        if zboundaries:
+            # compute Z-ROI for which both segmentations are present.
+            for z in range(zmin, zmax+1):  # going from inferior to superior
+                if np.any(image1.data[:, :, z]) and np.any(image2.data[:, :, z]):
+                    zmin = z
+                    break
+            for z in range(zmax, zmin+1, -1):  # going from superior to inferior
+                if np.any(image1.data[:, :, z]) and np.any(image2.data[:, :, z]):
+                    zmax = z
+                    break
+
+        if zmin > zmax:
+            # segmentations do not overlap
+            return 0.0
+
+        if mode == '3d':
+            # compute dice coefficient over Z-ROI
+            data1 = image1.data[:, :, zmin:zmax]
+            data2 = image2.data[:, :, zmin:zmax]
+
+            dice = np.sum(data2[data1 == label]) * 2.0 / (np.sum(data1) + np.sum(data2))
+
+        elif mode == '2d-slices':
+            raise ValueError('2D slices Dice coefficient feature is not implemented yet')
+
+    elif mode == '3d':
+        # compute 3d dice coefficient
+        dice = np.sum(image2.data[image1.data == label]) * 2.0 / (np.sum(image1.data) + np.sum(image2.data))
+
+    return dice
 
 def find_zmin_zmax(fname):
     import sct_utils as sct
@@ -1102,6 +1186,7 @@ def get_dimension(im_file, verbose=1):
     else:
         header = None
         sct.printv('WARNING: the provided image file isn\'t a nibabel.nifti1.Nifti1Image instance nor a msct_image.Image instance', verbose, 'warning')
+
     nb_dims = len(header.get_data_shape())
     if nb_dims == 2:
         nx, ny = header.get_data_shape()

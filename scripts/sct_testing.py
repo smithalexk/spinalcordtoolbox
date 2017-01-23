@@ -46,21 +46,24 @@ class bcolors:
 class param:
     def __init__(self):
         self.download = 0
-        self.path_data = 'sct_testing_data/data/'
+        self.path_data = 'sct_testing_data/'
         self.function_to_test = None
         # self.function_to_avoid = None
         self.remove_tmp_file = 0
         self.verbose = 1
-        self.url_git = 'https://github.com/neuropoly/sct_testing_data.git'
+        # self.url_git = 'https://github.com/neuropoly/sct_testing_data.git'
         self.path_tmp = ""
 
 
 # START MAIN
 # ==========================================================================================
-def main():
+def main(args=None):
+    if args is None:
+        args = sys.argv[1:]
 
+    # get parser
     parser = get_parser()
-    arguments = parser.parse(sys.argv[1:])
+    arguments = parser.parse(args)
 
     if '-d' in arguments:
         param.download = int(arguments['-d'])
@@ -93,8 +96,9 @@ def main():
     sct.printv('\nPath to testing data: '+param.path_data, param.verbose)
 
     # create temp folder that will have all results and go in it
-    param.path_tmp = sct.slash_at_the_end('tmp.'+time.strftime("%y%m%d%H%M%S"), 1)
-    sct.create_folder(param.path_tmp)
+    param.path_tmp = sct.tmp_create()
+    # param.path_tmp = sct.slash_at_the_end('tmp.'+time.strftime("%y%m%d%H%M%S"), 1)
+    # sct.create_folder(param.path_tmp)
     os.chdir(param.path_tmp)
 
     # get list of all scripts to test
@@ -127,17 +131,17 @@ def main():
 
 def downloaddata():
     sct.printv('\nDownloading testing data...', param.verbose)
-    sct.run('sct_download_data -d sct_testing_data')
+    import sct_download_data
+    sct_download_data.main(['-d', 'sct_testing_data'])
+    # sct.run('sct_download_data -d sct_testing_data')
 
 
 # list of all functions to test
 # ==========================================================================================
 def fill_functions():
     functions = []
-    #functions.append('test_debug')  --> removed by jcohenadad. No more use for it now.
-    #functions.append('test_debug')
     functions.append('sct_apply_transfo')
-    functions.append('sct_check_atlas_integrity')
+    # functions.append('sct_check_atlas_integrity')
     functions.append('sct_compute_mtr')
     functions.append('sct_concat_transfo')
     functions.append('sct_convert')
@@ -145,10 +149,12 @@ def fill_functions():
     functions.append('sct_create_mask')
     functions.append('sct_crop_image')
     functions.append('sct_dmri_compute_dti')
+    functions.append('sct_dmri_create_noisemask')
     functions.append('sct_dmri_get_bvalue')
     functions.append('sct_dmri_transpose_bvecs')
     functions.append('sct_dmri_moco')
     functions.append('sct_dmri_separate_b0_and_dwi')
+    functions.append('sct_documentation')
     functions.append('sct_extract_metric')
     # functions.append('sct_flatten_sagittal')
     functions.append('sct_fmri_compute_tsnr')
@@ -168,8 +174,6 @@ def fill_functions():
     functions.append('sct_smooth_spinalcord')
     functions.append('sct_straighten_spinalcord')
     functions.append('sct_warp_template')
-    functions.append('sct_documentation')
-    functions.append('sct_dmri_create_noisemask')
     return functions
 
 
@@ -219,7 +223,7 @@ def write_to_log_file(fname_log, string, mode='w'):
              + string
     # open file
     try:
-        f = open('../' + fname_log, mode)
+        f = open(fname_log, mode)
     except Exception as ex:
         raise Exception('WARNING: Cannot open log file.')
     f.write(string+'\n')
@@ -233,7 +237,7 @@ def test_function(script_name):
     #     return test_debug()  # JULIEN
     # else:
     # build script name
-    fname_log = script_name + ".log"
+    fname_log = '../' + script_name + ".log"
     tmp_script_name = script_name
     result_folder = "results_"+script_name
     script_name = "test_"+script_name

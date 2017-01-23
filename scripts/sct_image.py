@@ -10,7 +10,7 @@
 # About the license: see the file LICENSE.TXT
 #########################################################################################
 
-import sys
+import sys, os
 from numpy import concatenate, shape, newaxis
 from msct_parser import Parser
 from msct_image import Image, get_dimension
@@ -233,8 +233,8 @@ def main(args = None):
             fname_out = []
             for i, im in enumerate(im_out):
                 fname_out.append(add_suffix(fname_in[0], '_'+dim_list[dim].upper()+str(i).zfill(4)))
-                im_out[0].setFileName(fname_out[i])
-                im_out[0].save()
+                im.setFileName(fname_out[i])
+                im.save()
 
         printv('Created file(s):\n--> '+str(fname_out)+'\n', verbose, 'info')
         # printv('Created file(s):\n--> '+str([im.file_name+im.ext for im in im_out])+'\n', verbose, 'info')
@@ -251,6 +251,10 @@ def pad_image(im, pad_x_i=0, pad_x_f=0, pad_y_i=0, pad_y_f=0, pad_z_i=0, pad_z_f
     nx, ny, nz, nt, px, py, pz, pt = im.dim
     pad_x_i, pad_x_f, pad_y_i, pad_y_f, pad_z_i, pad_z_f = int(pad_x_i), int(pad_x_f), int(pad_y_i), int(pad_y_f), int(pad_z_i), int(pad_z_f)
 
+    if len(im.data.shape) == 2:
+        new_shape = list(im.data.shape)
+        new_shape.append(1)
+        im.data = im.data.reshape(new_shape)
     padded_data = zeros((nx+pad_x_i+pad_x_f, ny+pad_y_i+pad_y_f, nz+pad_z_i+pad_z_f))
 
     if pad_x_f == 0:
@@ -324,11 +328,12 @@ def split_data(im_in, dim):
     return im_out_list
 
 
-def concat_data(fname_in_list, dim):
+def concat_data(fname_in_list, dim, pixdim=None):
     """
     Concatenate data
     :param im_in_list: list of images.
     :param dim: dimension: 0, 1, 2, 3.
+    :param pixdim: pixel resolution to join to image header
     :return im_out: concatenated image
     """
     # WARNING: calling concat_data in python instead of in command line causes a non understood issue (results are different with both options)
@@ -372,6 +377,9 @@ def concat_data(fname_in_list, dim):
     im_out = Image(fname_in_list[0]).copy()
     im_out.data = data_concat
     im_out.setFileName(im_out.file_name+'_concat'+im_out.ext)
+
+    if pixdim is not None:
+        im_out.hdr['pixdim'] = pixdim
 
     return im_out
 
@@ -633,6 +641,9 @@ def set_orientation(im, orientation, data_inversion=False, filename=False, fname
             run('isct_orientation3d -i '+im+' -orientation '+orientation+' -o '+fname_out, 0)
             im_out = fname_out
         else:
+            fname_in = im.absolutepath
+            if fname_in not in os.listdir('.'):
+                im.save()
             run('isct_orientation3d -i '+im.absolutepath+' -orientation '+orientation+' -o '+fname_out, 0)
             im_out = Image(fname_out)
     else:

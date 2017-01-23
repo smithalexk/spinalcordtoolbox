@@ -1,6 +1,23 @@
 # CHANGES TO RELEASE
 
-##3.0 (TBD)
+##3.0_beta31 (2017-01-16)
+- BUG: **sct_process_segmentation** display spinal cord length when required (full spinal cord) (#1112)
+- BUG: **sct_propseg** Adding rules for in-segmentation errors (#1110)
+- BUG: PAM50: probabilist templates of WM and GM not sum to 1 (#411)
+- BUG: **sct_propseg**: fixed edge issue (#1074)
+- BUG: **sct_label_vertebrae**: fixed temporary folder not created (#1083)
+- BUG: **isct_test_function**: fixed temp folder of subject being created inside test folder of another subject (#1084)
+- BUG: **sct_apply_transfo**: fixed TR field on NIFTI is lost (#1013)
+- BUG: **sct_register_graymatter**: fixed empty inverse warping field (#1068)
+- OPT: **sct_label_vertebrae**: now outputing verbose=2 pics in ofolder (#1094)
+- OPT: **sct_straighten_spinalcord**: fixed Reduce required RAM (#979)
+- OPT: **sct_straighten_spinalcord**: removes accuracy computation by default (#1075) 
+- OPT: **sct_propseg**: improve robustness towards exception (#207)
+- OPT: **isct_test_function**: send email when finished (#1081)
+- OPT: **isct_test_function**: removed color tags on log entries  (#1035)
+
+##3.0_beta29 (2016-12-13)
+- NEW: PAM50 template now used as the default template
 - NEW: **sct_compute_snr**: compute SNR using several methods (Dietrich et al. 2007)
 - NEW: **sct_propseg**: now accepts a correction solution for sct_propseg in case of missing CSF/SC contrast and/or artefacts (see issue #664 for details)
 - NEW: **sct_propseg**: added flag to open a viewer for initializing spinal cord segmentation by manually providing a few points (issue #741)
@@ -9,13 +26,54 @@
 - NEW: **sct_dmri_create_noisemask**: Identification and estimation of noise in the diffusion signal, implemented by the Dipy software project (http://nipy.org/dipy/), based on the PIESNO method
 - NEW: **sct_register_graymatter**: Multi-label registration that accounts for gray matter shape.
 - NEW: **sct_register_multimodal**: features two new transformations: centermassrot and columnwise.
+- NEW: **sct_register_multimodal**: flag smoothWarpXY: regularization of warping field (only for algo=columnwize)
+- NEW: **sct_register_multimodal**: flag pca_eigenratio_th: Min ratio between the two eigenvalues for PCA-based angular adjustment (only for algo=centermassrot).
+- NEW: **sct_create_mask**: now compatible with 2D data (#1066)
+- NEW: **sct_maths**: computes mutual information and cross-correlation between images (#1054)
+- BUG: **sct_straighten_spinalcord**: Fixed #917, #924, #1063
 - BUG: Fixed issues #715, #719
 - BUG: **sct_propseg**: fixed issues #147, #242, #309, #376, #501, #544, #674, #680
 - BUG: **sct_segment_graymatter**: fixed issues #782, #813, #815
-- BUG: fixed incompatibility with CENTOS 6.X (issue #776)
+- BUG: **sct_register_graymatter**: fixed issue #1068
+- BUG: Fixed incompatibility with CENTOS 6.X (issue #776)
+- BUG: Binaries now hosted on Gihub for accessibility from China (#927)
+- BUG: **sct_resample**: Fixed slight image shift caused by resampling (#612)
 - OPT: **sct_check_dependencies**: Made test more sentitive to OS incompatibilities (issue #771)
-- OPT: **sct_register_multimodal**: major changes. Simplified flags. Fixed issues #350, #404, #414, #499, #650, #735, #737, #749, #807, #818
+- OPT: **sct_register_multimodal**: major changes. Simplified flags. Fixed issues #350, #404, #414, #499, #650, #735, #737, #749, #807, #818, #1033, #1034
 - OPT: **sct_register_to_template**: now uses slicewise rigid transfo at first step (instead of slicereg), which improves accuracy (issue #666)
+- OPT: **sct_register_to_template**: added contrast for registration: t2s
+- OPT: **sct_label_vertebrae**: now fully automatic (although unstable-- work in progress).
+- OPT: **sct_testing**: added integrity testing for CSA computation (#1031)
+- REF: **sct_testing**: sct_testing_data is now hosted on GitHub-release for better tracking and across-version compatibility.
+
+##3.0_beta28 (2016-11-25)
+- BUG: **sct_process_segmentation**: Fixed issue related to calculation of CSA (#1022)
+- BUG: **sct_label_vertebrae**: Fixed Vertebral labeling removes first vertebrae in the labelled segmentation (#700)
+- OPT: **sct_register_multimodal**: Now possible to input initial warping field (#1049)
+- OPT: **sct_register_multimodal**: Added feature to be able to input two pairs of label image for estimating affine/rigid/nonrigid transformation (#661)
+- OPT: **sct_extract_metric**: Added weighted-Maximum a posteriori extraction method (#1018)
+- OPT: Remove color tags on log entries (#1035)
+
+##3.0_beta27 (2016-10-23)
+- NEW: **sct_extract_metric**: method "max" to extract CSA value form interpolated volume (e.g. PAM50 space) without partial volume bias
+
+##3.0_beta26 (2016-10-05)
+- INST: Fixed #992, #1004, #1008, #1012
+
+##3.0_beta25 (2016-09-30)
+- OPT: Fixed #875
+- INST: Fixed #1007, #1009
+
+##3.0_beta24 (2016-09-28)
+- BUG: Fixed #870, #898, #859, #871, #1005, #750, #444, #878, #1000
+- INST: Fixed issue with matplotlib version 1.5.3
+
+##3.0_beta23 (2016-09-18)
+- BUG: Fixed #984, #983, #954, #978, #987, #938, #964, #638, #969, #922, #855
+- OPT: **sct_register_to_template**: added a flag "-ref" to be able to register to anisotropic data
+
+##3.0_beta22 (2016-09-09)
+- BUG: Fixed #994, #989, #988, #976, #968
 
 ##2.2.3 (2016-02-04)
 - BUG: **sct_straighten_spinalcord**: fixed instabilities related to generation of labels (issue #722)

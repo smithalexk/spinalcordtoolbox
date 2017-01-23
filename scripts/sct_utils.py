@@ -23,10 +23,11 @@ import subprocess
 import re
 from sys import stdout
 
+import glob
+import shutil
+
 # TODO: under run(): add a flag "ignore error" for isct_ComposeMultiTransform
 # TODO: check if user has bash or t-schell for fsloutput definition
-
-fsloutput = 'export FSLOUTPUTTYPE=NIFTI; ' # for faster processing, all outputs are in NIFTI'
 
 
 # define class color
@@ -40,7 +41,6 @@ class bcolors(object):
     cyan = '\033[96m'
     bold = '\033[1m'
     underline = '\033[4m'
-
 
 
 #=======================================================================================================================
@@ -79,10 +79,10 @@ def run_old(cmd, verbose=1):
 
 
 def run(cmd, verbose=1, error_exit='error', raise_exception=False):
-    if verbose==2:
-        printv(sys._getframe().f_back.f_code.co_name, 1, 'process')
+    # if verbose == 2:
+    #     printv(sys._getframe().f_back.f_code.co_name, 1, 'process')
     if verbose:
-        print(bcolors.blue+cmd+bcolors.normal)
+        printv(cmd, 1, 'code')
     process = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     output_final = ''
     while True:
@@ -116,10 +116,10 @@ def run(cmd, verbose=1, error_exit='error', raise_exception=False):
 # check RAM usage
 # work only on Mac OSX
 #=======================================================================================================================
-def checkRAM(os,verbose=1):
+def checkRAM(os, verbose=1):
     if (os == 'linux'):
         status, output = run('grep MemTotal /proc/meminfo', 0)
-        print output
+        print 'RAM: '+output
         ram_split = output.split()
         ram_total = float(ram_split[1])
         status, output = run('free -m', 0)
@@ -128,7 +128,7 @@ def checkRAM(os,verbose=1):
 
     elif (os == 'osx'):
         status, output = run('hostinfo | grep memory', 0)
-        print output
+        print 'RAM: '+output
         ram_split = output.split(' ')
         ram_total = float(ram_split[3])
 
@@ -159,10 +159,10 @@ def checkRAM(os,verbose=1):
             vmStats[(rowElements[0])] = int(rowElements[1].strip('\.')) * 4096
         
         if verbose:
-            print 'Wired Memory:\t\t%d MB' % ( vmStats["Pages wired down"]/1024/1024 )
-            print 'Active Memory:\t\t%d MB' % ( vmStats["Pages active"]/1024/1024 )
-            print 'Inactive Memory:\t%d MB' % ( vmStats["Pages inactive"]/1024/1024 )
-            print 'Free Memory:\t\t%d MB' % ( vmStats["Pages free"]/1024/1024 )
+            print '  Wired Memory:\t\t%d MB' % ( vmStats["Pages wired down"]/1024/1024 )
+            print '  Active Memory:\t%d MB' % ( vmStats["Pages active"]/1024/1024 )
+            print '  Inactive Memory:\t%d MB' % ( vmStats["Pages inactive"]/1024/1024 )
+            print '  Free Memory:\t\t%d MB' % ( vmStats["Pages free"]/1024/1024 )
             #print 'Real Mem Total (ps):\t%.3f MB' % ( rssTotal/1024/1024 )
 
         return ram_total
@@ -357,30 +357,66 @@ def check_if_rpi(fname):
 #=======================================================================================================================
 # find_file_within_folder
 #=======================================================================================================================
-def find_file_within_folder(fname, directory):
+def find_file_within_folder(fname, directory, seek_type='file'):
     """Find file (or part of file, e.g. 'my_file*.txt') within folder tree recursively - fname and directory must be
-    strings"""
+    strings
+    seek_type: 'file' or 'dir' to look for either a file or a directory respectively."""
     import fnmatch
 
     all_path = []
     for root, dirs, files in os.walk(directory):
-        for file in files:
-            if fnmatch.fnmatch(file, fname):
-                all_path.append(os.path.join(root, file))
+        if seek_type == 'dir':
+            for folder in dirs:
+                if fnmatch.fnmatch(folder, fname):
+                    all_path.append(os.path.join(root, folder))
+        else:
+            for file in files:
+                if fnmatch.fnmatch(file, fname):
+                    all_path.append(os.path.join(root, file))
     return all_path
+
+
 
 #=======================================================================================================================
 # create temporary folder and return path of tmp dir
 #=======================================================================================================================
-
 def tmp_create(verbose=1):
-    # path_tmp = tmp_create()
     printv('\nCreate temporary folder...', verbose)
     import time
     import random
     path_tmp = slash_at_the_end('tmp.'+time.strftime("%y%m%d%H%M%S")+'_'+str(random.randint(1, 1000000)), 1)
-    run('mkdir '+path_tmp, verbose)
+    # create directory
+    try:
+        os.makedirs(path_tmp)
+    except OSError:
+        if not os.path.isdir(path_tmp):
+            raise
     return path_tmp
+
+
+def delete_tmp_files_and_folders(path=''):
+    """
+    This function removes all files that starts with 'tmp.' in the path specified as input. If no path are provided,
+    the current path is selected. The function removes files and directories recursively and handles Exceptions and
+    errors by ignoring them.
+    Args:
+        path: directory in which temporary files and folders must be removed
+
+    Returns:
+
+    """
+    if not path:
+        path = os.getcwd()
+    pattern = os.path.join(path, 'tmp.*')
+
+    for item in glob.glob(pattern):
+        try:
+            if os.path.isdir(item):
+                shutil.rmtree(item, ignore_errors=True)
+            elif os.path.isfile(item):
+                os.remove(item)
+        except:  # in case an exception is raised (e.g., on Windows, if the file is in use)
+            continue
 
 
 #=======================================================================================================================
@@ -490,38 +526,68 @@ def check_if_same_space(fname_1, fname_2):
     return all(around(q1, dec) == around(q2, dec))
 
 
-#=======================================================================================================================
-# printv: enables to print or not, depending on verbose status
-#   type: handles color: normal (default), warning (orange), error (red)
-#=======================================================================================================================
 def printv(string, verbose=1, type='normal'):
-    # select color based on type of message
-    if type == 'normal':
-        color = bcolors.normal
-    if type == 'info':
-        color = bcolors.green
-    elif type == 'warning':
-        color = bcolors.yellow
-    elif type == 'error':
-        color = bcolors.red
-    elif type == 'code':
-        color = bcolors.blue
-    elif type == 'bold':
-        color = bcolors.bold
-    elif type == 'process':
-        color = bcolors.magenta
+    """enables to print color coded messages, depending on verbose status """
 
-    # print message
+    colors = {'normal': bcolors.normal, 'info': bcolors.green, 'warning': bcolors.yellow, 'error': bcolors.red,
+              'code': bcolors.blue, 'bold': bcolors.bold, 'process': bcolors.magenta}
+
     if verbose:
-        print(color+string+bcolors.normal)
+        # Print color only if the output is the terminal
+        if sys.stdout.isatty():
+            color = colors.get(type, bcolors.normal)
+            print(color + string + bcolors.normal)
+        else:
+            print(string)
 
-    # if error, exit program
     if type == 'error':
         from inspect import stack
-        frame,filename,line_number,function_name,lines,index = stack()[1]
-        # print(frame,filename,line_number,function_name,lines,index)
-        print(bcolors.red+filename+', line '+str(line_number)+bcolors.normal)  # print name of parent function
+        import traceback
+
+        frame, filename, line_number, function_name, lines, index = stack()[1]
+        if sys.stdout.isatty():
+            print('\n' + bcolors.red + filename + traceback.format_exc() + bcolors.normal)
+        else:
+            print('\n' + filename + traceback.format_exc())
         sys.exit(2)
+
+
+
+#=======================================================================================================================
+# send email
+#=======================================================================================================================
+def send_email(addr_to, addr_from='spinalcordtoolbox@gmail.com', passwd_from='', subject='', message='', filename=None):
+    import smtplib
+    from email.MIMEMultipart import MIMEMultipart
+    from email.MIMEText import MIMEText
+    from email.MIMEBase import MIMEBase
+    from email import encoders
+
+    msg = MIMEMultipart()
+
+    msg['From'] = addr_from
+    msg['To'] = addr_to
+    msg['Subject'] = subject  # "SUBJECT OF THE EMAIL"
+    body = message  # "TEXT YOU WANT TO SEND"
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    # filename = "NAME OF THE FILE WITH ITS EXTENSION"
+    if filename:
+        attachment = open(filename, "rb")
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload((attachment).read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', "attachment; filename= %s" % filename)
+        msg.attach(part)
+
+    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server.starttls()
+    server.login(addr_from, passwd_from)
+    text = msg.as_string()
+    server.sendmail(addr_from, addr_to, text)
+    server.quit()
+
 
 
 #=======================================================================================================================
@@ -546,8 +612,6 @@ def slash_at_the_end(path, slash=0):
         if not path[-1:] == '/':
             path = path+'/'
     return path
-
-
 
 
 #=======================================================================================================================
@@ -592,6 +656,22 @@ def get_interpolation(program, interp):
         interp_program = ' -n Linear'
     # return
     return interp_program
+
+
+#=======================================================================================================================
+# template file dictionary
+#=======================================================================================================================
+def template_dict(template):
+    """
+    Dictionary of file names for template
+    :param template:
+    :return: dict_template
+    """
+    if template == 'PAM50':
+        dict_template = {'t2': 'template/PAM50_t2.nii.gz',
+                         't1': 'template/PAM50_t1.nii.gz'}
+    return dict_template
+
 
 class UnsupportedOs(Exception):
     def __init__(self, value):

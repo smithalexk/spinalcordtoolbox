@@ -105,25 +105,51 @@ def main():
     print 'CPU cores: Available: ' + str(cpu_count()) + ', Used by SCT: '+output
 
     # check RAM
-    print 'RAM:'
-    sct.checkRAM(os_running)
+    sct.checkRAM(os_running, 0)
 
     # get path of the toolbox
-    path_sct = os.getenv("SCT_DIR")
-    if path_sct is None :
-        raise EnvironmentError("SCT_DIR, which is the path to the "
-                               "Spinalcordtoolbox install needs to be set")
+    path_sct = os.path.dirname(os.path.dirname(__file__))
+    if path_sct is None:
+        raise EnvironmentError("SCT_DIR, which is the path SCT install needs to be set")
     print ('SCT path: {0}'.format(path_sct))
 
-    # fetch version of the toolbox
-    with open (path_sct+"/version.txt", "r") as myfile:
-        version_sct = myfile.read().replace('\n', '')
-    with open (path_sct+"/commit.txt", "r") as myfile:
-        commit_sct = myfile.read().replace('\n', '')
-    print "SCT version: "+version_sct+'-'+commit_sct
+    # fetch true commit number and branch (do not use commit.txt which is wrong)
+    path_curr = os.path.abspath(os.curdir)
+    os.chdir(path_sct)
+    # first, make sure there is a .git folder
+    if os.path.isdir('.git'):
+        print 'Installation type: git'
+        sct_commit = commands.getoutput('git rev-parse HEAD')
+        sct_branch = commands.getoutput('git branch | grep \*').strip('* ')
+        if not (sct_commit.isalnum()):
+            sct_commit = 'unknown'
+            sct_branch = 'unknown'
+        print '  commit: '+sct_commit
+        print '  branch: '+sct_branch
+    else:
+        print 'Installation type: package'
+        # fetch version
+        with open(path_sct + '/version.txt', 'r') as myfile:
+            version_sct = myfile.read().replace('\n', '')
+        print '  version: '+version_sct
 
-    # check installation packages
-    print 'Python path: '+sys.executable
+    os.chdir(path_curr)
+
+    # # fetch version of the toolbox
+    # with open (path_sct+"/version.txt", "r") as myfile:
+    #     version_sct = myfile.read().replace('\n', '')
+    # with open (path_sct+"/commit.txt", "r") as myfile:
+    #     commit_sct = myfile.read().replace('\n', '')
+    # print "SCT version: "+version_sct+'-'+commit_sct
+
+    # check if Python path is within SCT path
+    print_line('Check Python path')
+    path_python = sys.executable
+    if path_sct in path_python:
+        print_ok()
+    else:
+        print_fail()
+        print '  Python path: '+path_python
 
     # check if data folder is empty
     print_line('Check if data are installed')
@@ -140,6 +166,8 @@ def main():
             module = 'skimage'
         elif i == 'scikit-learn':
             module = 'sklearn'
+        elif i == 'pyqt':
+            module = 'PyQt4'
         else:
             module = i
         print_line('Check if '+i+' ('+version_requirements.get(i)+') is installed')
@@ -266,12 +294,25 @@ def main():
     if complete_test:
         print (status, output), '\n'
 
+    # check if figure can be opened (in case running SCT via ssh connection)
+    print_line('Check if figure can be opened')
+    try:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            import matplotlib.pyplot as plt
+            plt.figure()
+            plt.close()
+            print_ok()
+    except:
+        print_fail()
+        print sys.exc_info()
+
     # close log file
     if create_log_file:
         sys.stdout = orig_stdout
         handle_log.close()
         print "File generated: "+file_log+'\n'
-
     print ''
     sys.exit(e + install_software)
     

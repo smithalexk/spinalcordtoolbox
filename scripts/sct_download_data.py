@@ -31,7 +31,7 @@ def get_parser():
                       type_value="multiple_choice",
                       description="Name of the dataset.",
                       mandatory=True,
-                      example=['sct_example_data', 'sct_testing_data', 'PAM50'])
+                      example=['sct_example_data', 'sct_testing_data', 'PAM50', 'MNI-Poly-AMU', 'gm_model'])
     parser.add_option(name="-v",
                       type_value="multiple_choice",
                       description="""Verbose. 0: nothing. 1: basic. 2: extended.""",
@@ -48,21 +48,22 @@ def get_parser():
 # ==========================================================================================
 def main(args=None):
 
+    if args is None:
+        args = sys.argv[1:]
+
     # initialization
     verbose = 1
-    dict_url = {'sct_example_data': 'https://github.com/neuropoly/sct_example_data/archive/master.zip',
-                'sct_testing_data': 'https://github.com/neuropoly/sct_testing_data/archive/master.zip',
-                'PAM50': 'https://dl.dropboxusercontent.com/u/20592661/sct/PAM50.zip'}
+    dict_url = {'sct_example_data': 'https://osf.io/feuef/?action=download',
+                'sct_testing_data': 'https://osf.io/uqcz5/?action=download',
+                'PAM50': 'https://osf.io/gdwn6/?action=download',
+                'MNI-Poly-AMU': 'https://osf.io/b26vh/?action=download',
+                'gm_model': 'https://osf.io/ugscu/?action=download'}
     tmp_file = 'tmp.data.zip'
-
-    # check user arguments
-    if not args:
-        args = sys.argv[1:]
 
     # Get parser info
     parser = get_parser()
-    arguments = parser.parse(sys.argv[1:])
-    data_name = arguments["-d"]
+    arguments = parser.parse(args)
+    data_name = arguments['-d']
     if '-v' in arguments:
         verbose = int(arguments['-v'])
 
@@ -121,7 +122,7 @@ def download_from_url(url, local):
     i_trial = 1
     max_trials = 3
 
-    print 'Reaching URL...'
+    print 'Reaching URL: '+url
     while keep_connecting:
         try:
             u = urllib2.urlopen(url)

@@ -11,25 +11,27 @@
 # About the license: see the file LICENSE.TXT
 #########################################################################################
 
-import commands
-import sys
+# import commands
+# import sys
 import os
 from pandas import DataFrame
 import sct_segment_graymatter
-from msct_image import Image
+# from msct_image import Image
 import sct_utils as sct
 from numpy import sum, mean
-import time
+# import time
+from sct_warp_template import get_file_label
 # append path that contains scripts, to be able to load modules
-status, path_sct = commands.getstatusoutput('echo $SCT_DIR')
-sys.path.append(path_sct + '/scripts')
-
+# status, path_sct = commands.getstatusoutput('echo $SCT_DIR')
+# sys.path.append(path_sct + '/scripts')
 
 
 def test(path_data, parameters=''):
 
     if not parameters:
-        parameters = '-i mt/mt0.nii.gz -s mt/mt0_seg.nii.gz -vertfile mt/label/template/MNI-Poly-AMU_level.nii.gz -normalize 1 -ref mt/mt0_manual_gmseg.nii.gz -qc 0'
+        # get file name of vertebral labeling from template
+        # file_vertfile = get_file_label(path_data+'mt/label/template', 'vertebral', output='file')
+        parameters = '-i t2s/t2s.nii.gz -s t2s/t2s_seg.nii.gz -vertfile t2s/MNI-Poly-AMU_level_crop.nii.gz -ref t2s/t2s_gmseg_manual.nii.gz -qc 0'
 
     parser = sct_segment_graymatter.get_parser()
     dict_param = parser.parse(parameters.split(), check_file_exist=False)
@@ -38,11 +40,13 @@ def test(path_data, parameters=''):
     #if -model is used : do not add the path before.
     if '-model' in dict_param_with_path.keys():
         dict_param_with_path['-model'] = dict_param_with_path['-model'][len(path_data):]
+    if '-vertfile' in dict_param_with_path.keys():
+        dict_param_with_path['-vertfile'] = sct.slash_at_the_end(path_data, slash=1)+dict_param_with_path['-vertfile']
 
     param_with_path = parser.dictionary_to_string(dict_param_with_path)
 
     # Check if input files exist
-    if not (os.path.isfile(dict_param_with_path['-i']) and os.path.isfile(dict_param_with_path['-s']) and os.path.isfile(dict_param_with_path['-vertfile'])): # and os.path.isfile(dict_param_with_path['-ref'])):
+    if not (os.path.isfile(dict_param_with_path['-i']) and os.path.isfile(dict_param_with_path['-s'])): 
         status = 200
         output = 'ERROR: the file(s) provided to test function do not exist in folder: ' + path_data
         return status, output, DataFrame(data={'status': status, 'output': output, 'dice_gm': float('nan'), 'dice_wm': float('nan'), 'hausdorff': float('nan'), 'med_dist': float('nan'), 'duration_[s]': float('nan')}, index=[path_data])
@@ -66,8 +70,8 @@ def test(path_data, parameters=''):
     if status == 0 and "-ref" in dict_param_with_path.keys()    :
         target_name = sct.extract_fname(dict_param_with_path["-i"])[1]
 
-        dice_fname = path_output+'dice_'+target_name+'_'+dict_param_with_path["-res-type"]+'.txt'
-        hausdorff_fname = path_output+'hd_'+target_name+'_'+dict_param_with_path["-res-type"]+'.txt'
+        dice_fname = path_output+'dice_coefficient_'+target_name+'.txt'
+        hausdorff_fname = path_output+'hausdorff_dist_'+target_name+'.txt'
 
         # Extracting dice results:
         dice = open(dice_fname, 'r')
@@ -136,7 +140,7 @@ def test(path_data, parameters=''):
         result_median_dist = mean(max_med)
 
         # Integrity check
-        hd_threshold = 1.5 # in mm
+        hd_threshold = 3 # in mm
         wm_dice_threshold = 0.8
         if result_hausdorff > hd_threshold or result_dice_wm < wm_dice_threshold:
             status = 99

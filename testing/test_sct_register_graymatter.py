@@ -30,7 +30,7 @@ sys.path.append(path_sct + '/scripts')
 def test(path_data, parameters=''):
 
     if not parameters:
-        parameters = ' -t mt/label/ -w mt/warp_template2mt.nii.gz -gm mt/mt0_gmseg.nii.gz -wm mt/mt0_wmseg.nii.gz -manual-gm mt/mt0_manual_gmseg.nii.gz -sc mt/mt0_seg.nii.gz -qc 0' #-d mt/mt0.nii.gz
+        parameters = ' -t mt/label/ -w mt/warp_template2mt.nii.gz -gm mt/mt1_gmseg.nii.gz -wm mt/mt1_wmseg.nii.gz -manual-gm mt/mt1_gmseg_goldstandard.nii.gz -sc mt/mt1_seg.nii.gz -qc 0' #-d mt/mt0.nii.gz
 
     parser = sct_register_graymatter.get_parser()
     dict_param = parser.parse(parameters.split(), check_file_exist=False)
@@ -49,7 +49,7 @@ def test(path_data, parameters=''):
         subject_folder = subject_folder[-2]
     else:
         subject_folder = subject_folder[-1]
-    path_output = sct.slash_at_the_end('sct_register_graymatter' + subject_folder + '_' + time.strftime("%y%m%d%H%M%S") + '_'+str(random.randint(1, 1000000)), slash=1)
+    path_output = sct.slash_at_the_end('sct_register_graymatter_' + subject_folder + '_' + time.strftime("%y%m%d%H%M%S") + '_'+str(random.randint(1, 1000000)), slash=1)
     param_with_path += ' -ofolder ' + path_output
 
     cmd = 'sct_register_graymatter ' + param_with_path

@@ -24,7 +24,7 @@ import nibabel
 from scipy import ndimage
 
 import sct_utils as sct
-from sct_image import get_orientation_3d
+from sct_image import get_orientation
 from sct_convert import convert
 from msct_image import Image
 from sct_image import copy_header, concat_data
@@ -47,11 +47,16 @@ class Param:
         self.verbose = 1
         self.remove_tmp_files = 1
         self.offset = '0,0'
+param = Param()
+param_default = Param()
 
 
 # main
 #=======================================================================================================================
-def main():
+def main(args=None):
+
+    if args is None:
+        args = sys.argv[1:]
 
     # Parameters for debug mode
     if param.debug:
@@ -67,7 +72,7 @@ def main():
     else:
         # Check input parameters
         parser = get_parser()
-        arguments = parser.parse(sys.argv[1:])
+        arguments = parser.parse(args)
 
         param.fname_data = arguments['-i']
 
@@ -114,11 +119,12 @@ def create_mask():
 
     # create temporary folder
     sct.printv('\nCreate temporary folder...', param.verbose)
-    path_tmp = sct.slash_at_the_end('tmp.'+time.strftime("%y%m%d%H%M%S"), 1)
-    sct.run('mkdir '+path_tmp, param.verbose)
+    path_tmp = sct.tmp_create(param.verbose)
+    # )sct.slash_at_the_end('tmp.'+time.strftime("%y%m%d%H%M%S"), 1)
+    # sct.run('mkdir '+path_tmp, param.verbose)
 
     sct.printv('\nCheck orientation...', param.verbose)
-    orientation_input = get_orientation_3d(param.fname_data, filename=True)
+    orientation_input = get_orientation(Image(param.fname_data))
     sct.printv('.. '+orientation_input, param.verbose)
     reorient_coordinates = False
 
@@ -200,7 +206,7 @@ def create_mask():
     cy = [0] * nz
     for iz in range(0, nz, 1):
         if iz in z_centerline_not_null:
-            cx[iz], cy[iz] = ndimage.measurements.center_of_mass(numpy.array(data_centerline[:, :, z_centerline_not_null[iz]]))
+            cx[iz], cy[iz] = ndimage.measurements.center_of_mass(numpy.array(data_centerline[:, :, iz]))
     # create 2d masks
     file_mask = 'data_mask'
     for iz in range(nz):
@@ -317,7 +323,7 @@ def create_mask2d(center, shape, size, nx, ny, even=0, spacing=None):
         radius = ceil((int(size) - 1) / 2.0)
 
     if shape == 'box':
-        mask2d[xc - radius:xc + radius + 1, yc - radius:yc + radius + 1] = 1
+        mask2d[int(xc - radius):int(xc + radius) + 1, int(yc - radius):int(yc + radius) + 1] = 1
 
     elif shape == 'cylinder':
         mask2d = ((xx+offset[0]-xc)**2 + (yy+offset[1]-yc)**2 <= radius**2)*1
