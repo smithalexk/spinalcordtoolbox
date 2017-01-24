@@ -399,6 +399,8 @@ def extract_centerline(fname_segmentation, remove_temp_files, verbose = 0, algo_
     im_seg = Image('segmentation_RPI.nii.gz')
     data = im_seg.data
 
+    print '\n\n' + str(np.unique(data))
+
     # Get size of data
     sct.printv('\nGet data dimensions...', verbose)
     nx, ny, nz, nt, px, py, pz, pt = im_seg.dim
@@ -433,6 +435,9 @@ def extract_centerline(fname_segmentation, remove_temp_files, verbose = 0, algo_
 
     # extract centerline and smooth it
     x_centerline_fit, y_centerline_fit, z_centerline_fit, x_centerline_deriv, y_centerline_deriv, z_centerline_deriv = smooth_centerline('segmentation_RPI.nii.gz', type_window = type_window, window_length = window_length, algo_fitting = algo_fitting, verbose = verbose)
+
+    print '\n\n' + str(nz)
+    print '\n\n' + str(max(z_centerline_fit))
 
     if verbose == 2:
             import matplotlib.pyplot as plt
