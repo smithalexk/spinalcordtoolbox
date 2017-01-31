@@ -15,6 +15,28 @@ import random
 import json
 import bz2
 
+from sortedcontainers import SortedListWithKey
+from operator import itemgetter
+
+import time
+import argparse
+
+
+
+TODO_STRING = """\n
+                - sct_image RPI sur les 25 images
+                - sct_convert en .img
+                - envoyer le folder .img chez ferguson
+                - faire tourner spine-detect-cnn
+                - pull les resultats sur evans
+                - compute les metrics de validation
+                - idem sur le *_cnn_2
+                - comparer les resultats: choisir le meilleur pour la suite
+                - faire tourner cnn sur tout le dataset
+                \n
+            """
+
+
 def create_folders_local(folder2create_lst):
 
     for folder2create in folder2create_lst:
@@ -404,126 +426,369 @@ class KerasConvNet(Sequential):
         self._flattened_layers = None"""
         self.create_model()
 
+def extract_patches_from_image(image_file, patches_coordinates, patch_size=32, slice_of_interest=None):
+    result = []
+    for k in range(len(patches_coordinates)):
+        if slice_of_interest is None:
+            ind = [patches_coordinates[k][0], patches_coordinates[k][1], patches_coordinates[k][2]]
+        else:
+            ind = [patches_coordinates[k][0], patches_coordinates[k][1], slice_of_interest]
+
+        # Transform voxel coordinates to physical coordinates to deal with different resolutions
+        # 1. transform ind to physical coordinates
+        ind_phys = image_file.transfo_pix2phys([ind])[0]
+        # 2. create grid around ind  - , ind_phys[2]
+        grid_physical = np.mgrid[ind_phys[0] - patch_size / 2:ind_phys[0] + patch_size / 2, ind_phys[1] - patch_size / 2:ind_phys[1] + patch_size / 2]
+        # 3. transform grid to voxel coordinates
+        coord_x = grid_physical[0, :, :].ravel()
+        coord_y = grid_physical[1, :, :].ravel()
+        coord_physical = [[coord_x[i], coord_y[i], ind_phys[2]] for i in range(len(coord_x))]
+        grid_voxel = np.array(image_file.transfo_phys2continuouspix(coord_physical))
+        np.set_printoptions(threshold=np.inf)
+        # 4. interpolate image on the grid, deal with edges
+        patch = np.reshape(image_file.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]), interpolation_mode=1, border='reflect'), (patch_size, patch_size))
+
+        if patch.shape[0] == patch_size and patch.shape[1] == patch_size:
+            result.append(np.expand_dims(patch, axis=0))
+    if len(result) != 0:
+        return np.concatenate(result, axis=0)
+    else:
+        return None
+
+def prediction_cnn(im_data, model, initial_resolution, initial_resize, threshold, patch_size, path_output):
+
+    time_prediction = time.time()
+
+    nx, ny, nz, nt, px, py, pz, pt = im_data.dim
+    nb_voxels_image = nx * ny * nz
+
+    # first round of patch prediction
+    initial_coordinates_x = range(int(initial_resize[0]*nx), nx-int(initial_resize[0]*nx), initial_resolution[0])
+    initial_coordinates_y = range(int(initial_resize[1]*ny), ny-int(initial_resize[1]*ny), initial_resolution[1])
+    X, Y = np.meshgrid(initial_coordinates_x, initial_coordinates_y)
+    X, Y = X.ravel(), Y.ravel()
+    initial_coordinates = [[X[i], Y[i]] for i in range(len(X))]
+
+    print '... Initial prediction:\n'
+    input_image = im_data.copy()
+    input_image.data *= 0
+    for slice_number in range(0, nz, initial_resolution[2]):
+        print '... ... slice #' + str(slice_number) + '/' + str(nz)
+        patches = extract_patches_from_image(im_data, initial_coordinates, patch_size=patch_size, slice_of_interest=slice_number)
+        patches = np.asarray(patches, dtype=int)
+        patches = patches.reshape(patches.shape[0], patches.shape[1], patches.shape[2])
+
+        X_test = patches
+        y_pred = model.predict(X_test)
+        y_pred = y_pred[:,1]
+
+        for i,pp in enumerate(y_pred):
+            input_image.data[initial_coordinates[i][0], initial_coordinates[i][1], slice_number] = pp
+
+    input_image.setFileName(path_output)
+    input_image.save()
+
+    print '\n... Time to predict cord location: ' + str(np.round(time.time() - time_prediction)) + ' seconds'
+
+def init_cnn_model(path_model):
+
+    fname_model = path_model.split('.')[0]
+    params_cnn = {'patch_size': [32, 32],
+                  'number_of_channels': 1,
+                  'batch_size': 128,
+                  'number_of_features': [[32, 32], [64, 64]],
+                  'loss': 'categorical_crossentropy'
+                  }
+    model = KerasConvNet(params_cnn)
+    model.create_model()
+    model.load(fname_model)
+
+    return model
+
+def prepare_prediction_cnn(path_local, model, cc, param_dct, thrsh):
+
+    path_nii = path_local + 'input_nii_' + cc + '/'
+    path_output_nii_cnn = path_local + 'cnn_nii_' + cc + '/'
+    path_output_img_cnn = path_local + 'cnn_img_' + cc + '/'
+    create_folders_local([path_output_nii_cnn, path_output_img_cnn])
+
+    patch_size = param_dct['patch_size']
+    initial_resolution = param_dct['initial_resolution']
+    initial_resize = param_dct['initial_resize']
+    initial_list_offset = param_dct['initial_list_offset']
+
+    with open(path_local + 'cnn_dataset_lst_' + cc + '.pkl') as outfile:    
+        testing_lst = pickle.load(outfile)
+        outfile.close()
+
+    path_nii2convert_lst = []
+    for fname_img in testing_lst:
+    # for fname_img in testing_lst[:25]:
+        subject_name = fname_img.split('.')[0]
+        fname_input = path_nii + subject_name + '.nii.gz'
+        fname_output = path_output_nii_cnn + subject_name + '_pred.nii.gz'
+
+        if not os.path.isfile(fname_output):
+            im_data = Image(fname_input)
+
+            tick = time.time()
+
+            im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
+
+            prediction_cnn(im_data, model, initial_resolution, initial_resize, initial_list_offset, 
+                            thrsh, patch_size, fname_output)
+
+            os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
+        
+            path_nii2convert_lst.append(fname_output)
+
+    convert_nii2img(path_nii2convert_lst, path_output_img_cnn)
+
+
+def send_dataCNN2ferguson(path_local, path_ferguson, cc, llambda):
+
+    pickle_ferguson = {
+                        'contrast': cc,
+                        'lambda': llambda
+                        }
+    path_pickle_ferguson = path_local + 'ferguson_cnn_config.pkl'
+    pickle.dump(pickle_ferguson, open(path_pickle_ferguson, "wb"))
+
+    os.system('scp -r ' + path_local + 'cnn_img_' + cc + '/' + ' ferguson:' + path_ferguson)
+    os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
+
+
+def pull_CNNimg_convert_nii_remove_img(path_local, path_ferguson, cc, llambda):
+
+    path_ferguson_res = path_ferguson + 'cnn_output_img_' + cc + '_' + llambda + '/'
+    path_local_res_img = path_local + 'cnn_output_img_' + cc + '_' + llambda + '/'
+    path_local_res_nii = path_local + 'cnn_output_nii_' + cc + '_' + llambda + '/'
+
+    create_folders_local([path_local_res_nii])
+
+    # Pull .img results from ferguson
+    os.system('scp -r ferguson:' + path_ferguson_res + ' ' + path_local)
+
+    # Convert .img to .nii
+    # Remove .img files
+    for ff in os.listdir(path_local_res_img):
+        if ff.endswith('_ctr.hdr'):
+            fname_cur = path_local_res_img + ff
+            fname_cur_out = path_local_res_nii + ff.split('_ctr')[0] + '_centerline_pred.nii.gz'
+            img = nib.load(fname_cur)
+            nib.save(img, fname_cur_out)
+
+    os.system('rm -r ' + path_local_res_img)
+
+
+def _compute_stats(img_pred, img_true, img_seg_true):
+    """
+        -> mse = Mean Squared Error on distance between predicted and true centerlines
+        -> maxmove = Distance max entre un point de la centerline predite et de la centerline gold standard
+        -> zcoverage = Pourcentage des slices de moelle ou la centerline predite est dans la sc_seg_manual
+    """
+
+    stats_dct = {
+                    'mse': None,
+                    'maxmove': None,
+                    'zcoverage': None
+                }
+
+
+    count_slice, slice_coverage = 0, 0
+    mse_dist = []
+    for z in range(img_true.dim[2]):
+
+        if np.sum(img_true.data[:,:,z]):
+            x_true, y_true = [np.where(img_true.data[:,:,z] > 0)[i][0] 
+                                for i in range(len(np.where(img_true.data[:,:,z] > 0)))]
+            x_pred, y_pred = [np.where(img_pred.data[:,:,z] > 0)[i][0]
+                                for i in range(len(np.where(img_pred.data[:,:,z] > 0)))]
+           
+            xx_seg, yy_seg = np.where(img_seg_true.data[:,:,z]==1.0)
+            xx_yy = [[x,y] for x, y in zip(xx_seg,yy_seg)]
+            if [x_pred, y_pred] in xx_yy:
+                slice_coverage += 1
+
+            x_true, y_true = img_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], img_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
+            x_pred, y_pred = img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
+
+            dist = ((x_true-x_pred))**2 + ((y_true-y_pred))**2
+            mse_dist.append(dist)
+
+            count_slice += 1
+
+    if len(mse_dist):
+        stats_dct['mse'] = sqrt(sum(mse_dist)/float(count_slice))
+        stats_dct['maxmove'] = sqrt(max(mse_dist))
+        stats_dct['zcoverage'] = float(slice_coverage*100.0)/count_slice
+
+    return stats_dct
+
+
+def _compute_stats_file(fname_ctr_pred, fname_ctr_true, fname_seg_true, folder_out, fname_out):
+
+    img_pred = Image(fname_ctr_pred)
+    img_true = Image(fname_ctr_true)
+    img_seg_true = Image(fname_seg_true)
+
+    stats_file_dct = _compute_stats(img_pred, img_true, img_seg_true)
+
+    create_folders_local([folder_out])
+
+    pickle.dump(stats_file_dct, open(fname_out, "wb"))
+
+
+def _compute_stats_folder(subj_name_lst, cc, llambda, folder_out, fname_out):
+
+    stats_folder_dct = {}
+
+    mse_lst, maxmove_lst, zcoverage_lst = [], [], []
+    for subj in subj_name_lst:
+        with open(folder_out + 'res_' + cc + '_' + llambda + '_' + subj + '.pkl') as outfile:    
+            subj_metrics = pickle.load(outfile)
+            outfile.close()
+        mse_lst.append(subj_metrics['mse'])
+        maxmove_lst.append(subj_metrics['maxmove'])
+        zcoverage_lst.append(subj_metrics['zcoverage'])
+
+    stats_folder_dct['avg_mse'] = round(np.mean(mse_lst),2)
+    stats_folder_dct['avg_maxmove'] = round(np.mean(maxmove_lst),2)
+    stats_folder_dct['cmpt_fail_subj_test'] = round(sum(elt >= 10.0 for elt in maxmove_lst)*100.0/len(maxmove_lst),2)
+    stats_folder_dct['avg_zcoverage'] = round(np.mean(zcoverage_lst),2)
+
+    print stats_folder_dct
+    pickle.dump(stats_folder_dct, open(fname_out, "wb"))
 
 
 
+def compute_dataset_stats(path_local, cc, llambda):
+
+    path_local_nii = path_local + 'cnn_output_nii_' + cc + '_' + llambda + '/'
+    path_local_res_pkl = path_local + 'cnn_pkl' + '/'
+    path_local_gold = path_local + 'gold_' + cc + '/'
+    path_local_seg = path_local + 'input_nii_' + cc + '/'
+    fname_pkl_out = path_local_res_pkl + 'res_' + cc + '_' + llambda + '_'
+
+    subj_name_lst = []
+    for ff in os.listdir(path_local_nii):
+        print ff
+        if ff.endswith('_centerline_pred.nii.gz'):
+            subj_name_cur = ff.split('_pred_centerline_pred.nii.gz')[0]
+            subj_name_lst.append(subj_name_cur)
+            fname_subpkl_out = fname_pkl_out + subj_name_cur + '.pkl'
+            
+            if not os.path.isfile(fname_subpkl_out):
+                subj_name_lst.append(subj_name_cur)
+                path_cur_pred = path_local_nii + ff
+                path_cur_gold = path_local_gold + subj_name_cur + '_centerline_gold.nii.gz'
+                path_cur_gold_seg = path_local_seg + subj_name_cur + '_seg.nii.gz'
+
+                _compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg, path_local_res_pkl, fname_subpkl_out)
+
+    fname_pkl_out_all = fname_pkl_out + 'all.pkl'
+    if not os.path.isfile(fname_pkl_out_all):
+        _compute_stats_folder(subj_name_lst, cc, llambda, path_local_res_pkl, fname_pkl_out_all)
+
+def display_results(path_local, cc):
+
+    path_local_res_pkl = path_local + 'cnn_pkl' + '/'
+
+    for f in os.listdir(path_local_res_pkl):
+        if f.endswith('_all.pkl') and f.startswith('res_'+cc):
+            with open(path_local_res_pkl + f) as outfile:    
+                lambda_metrics = pickle.load(outfile)
+                outfile.close()
+            print '\n' + f
+            print lambda_metrics
+
+
+# ******************************************************************************************
+
+
+# ****************************      USER CASE      *****************************************
+
+def readCommand(  ):
+    "Processes the command used to run from the command line"
+    parser = argparse.ArgumentParser('CNN-Sdika Pipeline')
+    parser.add_argument('-ofolder', '--output_folder', help='Output Folder', required = False)
+    parser.add_argument('-c', '--contrast', help='Contrast of Interest', required = False)
+    parser.add_argument('-l', '--llambda', help='Lambda Sdika', required = False)
+    parser.add_argument('-s', '--step', help='Prepare (step=0) or Push (step=1) or Pull (step 2) or Compute metrics (step=3) or Display results (step=4)', 
+                                        required = False)
+    arguments = parser.parse_args()
+    return arguments
+
+
+USAGE_STRING = """
+  USAGE:      python sct_sdika.py -ofolder '/Users/chgroc/data/data_sdika/' <options>
+                  -> ...s=0 >> CNN prediction
+                  -> ...s=1 >> Push data to Ferguson
+                  -> ...s=2 >> Pull data from Ferguson
+                  -> ...s=3 >> Evaluate Sdika algo by computing metrics
+                  -> ...s=4 >> Display results
+                 """
+
+if __name__ == '__main__':
+
+    # Read input
+    parse_arg = readCommand()
+
+    if not parse_arg.output_folder:
+        print USAGE_STRING
+    else:
+        path_local_sdika = parse_arg.output_folder
+
+    path_ferguson = '/home/neuropoly/code/spine-cnn/'
+
+    if not parse_arg.step:
+        step = 0
+    else:
+        step = int(parse_arg.step)  
+
+    # Format of parser arguments
+    contrast_of_interest = str(parse_arg.contrast)
+
+    if contrast_of_interest == 't2':
+        path_model = '/Users/chgroc/data/spine_detection/CNN_000035840256_000000_weights'
+        threshold = 0.6720970273017883         # Set a value (float) or Trial path
+        llambda = str(0.35)
+        grid_search_dct={'patch_size':32,
+                        'initial_resolution': [2, 2, 1],
+                        'initial_resize': [0.1, 0.25]
+                        }
+    elif contrast_of_interest == 't2s':
+        path_model = '/Users/chgroc/data/spine_detection/CNN_000005131008_000000_weights'
+        threshold = 0.06963882595300674        # Set a value (float) or Trial path
+        # llambda = str(0.35)
+        grid_search_dct={'patch_size':32,
+                        'initial_resolution': [2, 2, 1],
+                        'initial_resize': [0.25, 0.25]
+                        }
+    else:
+        if not parse_arg.llambda:
+            llambda = str(1)
+        else:
+            llambda = str(parse_arg.llambda)  
+
+    if not step:
+        model = init_cnn_model(path_model)
+        prepare_prediction_cnn(path_local_sdika, model, contrast_of_interest, grid_search_dct, threshold)
+
+    elif step == 1:
+        send_dataCNN2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
+
+    elif step == 2:
+        pull_CNNimg_convert_nii_remove_img(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
+
+    elif step == 3:
+        compute_dataset_stats(path_local_sdika, contrast_of_interest, llambda)
+
+    elif step == 4:
+        display_results(path_local_sdika, contrast_of_interest)
+
+    print TODO_STRING
 
 
 
-
-
-####################################################################################################################
-#   User Case
-
-
-# *********************** PATH & CONFIG ***********************
-# fname_local_script = '/Users/chgroc/spinalcordtoolbox/dev/sct_detect_spinalcord_cnn_ferguson.py'
-# path_ferguson = '/home/neuropoly/code/spine-ms/'
-# path_sct_testing_large = '/Volumes/data_shared/sct_testing/large/'
-path_local_sdika = '/Users/chgroc/data/data_sdika/'
-# create_folders_local([path_local_sdika])
-# # contrast_lst = ['t2', 't1', 't2s']
-# contrast_lst = ['t2']
-
-prepare_dataset_cnn(path_local_sdika, 't2', '/Volumes/data_processing/bdeleener/machine_learning/filemanager_large_nobrain_nopad/datasets.pbz2')
-
-
-
-
-path_model = '/Users/benjamindeleener/data/machine_learning/results_pipeline_cnn/large/CNN_000015360256_000000_weights'
-threshold = 0.8936676383018494
-
-path_model = path_model.split('.')[0]
-params_cnn = {'patch_size': [32, 32],
-              'number_of_channels': 1,
-              'batch_size': 128,
-              'number_of_features': [[32, 32], [64, 64]],
-              'loss': 'categorical_crossentropy'
-              }
-model = KerasConvNet(params_cnn)
-model.create_model()
-model.load(path_model)
-
-grid_search_dict_t2={'patch_size':32,
-                    'initial_resolution': [2, 2, 1],
-                    'initial_resize': [0.1, 0.25],
-                    'initial_list_offset': [[xv, yv, zv] for xv in range(-1,1) for yv in range(-1,1) for zv in range(-5,5) if [xv, yv, zv] != [0, 0, 0]]
-                    }
-patch_size = grid_search_dict_t2['patch_size']
-initial_resolution = grid_search_dict_t2['initial_resolution']
-initial_resize = grid_search_dict_t2['initial_resize']
-initial_list_offset = grid_search_dict_t2['initial_list_offset']
-
-    # # Input Image
-    # fname_input = arguments['-i']
-    # folder_input, subject_name = os.path.split(fname_input)
-    # subject_name = subject_name.split('.nii.gz')[0]
-    # im_data = Image(fname_input)
-    # print '\nInput Image: ' + fname_input
-
-    # # Output Folder
-    # fname_output = arguments['-o']
-    # folder_output, subject_name_out = os.path.split(fname_output)
-    # folder_output += '/'
-    # prefixe_output = subject_name.split('.nii.gz')[0]
-    # print '\nOutput Folder: ' + folder_output
-
-    # #### Brouillon
-    # # spiral_coord(np.array(range(180)).reshape(10,18),10,18)
-    # # plot_cOm(folder_output + 'e23185_t2coord_pos_tmp.pkl', im_data.data)
-    # #### Brouillon
-
-    # tick = time.time()
-
-    # im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
-
-    # print '\nRun Initial patch-based prediction'
-    # fname_seg = prediction_init(im_data, model, initial_resolution, initial_resize, initial_list_offset, 
-    #                              threshold, feature_fct, patch_size, folder_output + prefixe_output, verbose)
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# # *********************** PREPARE DATASET ***********************
-# prepare_dataset(path_local_sdika, contrast_lst, path_sct_testing_large)
-
-# # *********************** SEND SCRIPT TO FERGUSON ***********************
-# os.system('scp ' + fname_local_script + ' ferguson:' + path_ferguson)
-
-# # *********************** SEND DATA TO FERGUSON ***********************
-# send_data2ferguson(path_local_sdika, path_ferguson, 't2', 1)
-# # send_data2ferguson(path_local_sdika, path_ferguson, 't1', 1)
-
-# # *********************** PULL RESULTS FROM FERGUSON ***********************
-# # pull_img_convert_nii_remove_img(path_local_sdika, path_ferguson, 't2', 1)
-# # pull_img_convert_nii_remove_img(path_local_sdika, path_ferguson, 't1', 1)
-    
 

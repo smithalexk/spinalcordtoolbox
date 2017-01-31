@@ -1,40 +1,91 @@
-import bz2
-import sct_utils as sct
+#!/usr/bin/env python
+#########################################################################################
+#
+# Pipeline for the Sdika Project
+#           - Import data from /data_shared/sct_testing/large/
+#           - Unification of orientation, name convention
+#           - Transfert data to ferguson to be process
+#           - Compute the metrics / Evaluate the performance of Sdika Algorithm
+#
+# ---------------------------------------------------------------------------------------
+# Authors: Charley
+# Modified: 2017-01-25
+#
+#########################################################################################
+
+
+
+
+# ****************************      IMPORT      ****************************   
+# Utils Imports
 import pickle
 import os
-import nibabel as nib
+import nibabel as nib #### A changer en utilisant Image
 import shutil
-
-from msct_image import Image
 import numpy as np
 from math import sqrt
-
 from collections import Counter
 import random
-
 import json
+# SCT Imports
+from msct_image import Image
+# ************************************************************************** 
 
+
+
+
+
+
+# ****************************      UTILS FUNCTIONS      ****************************   
 def create_folders_local(folder2create_lst):
-
+    ########################################
+    #
+    #   Create folders if not exist
+    #
+    #       Inputs:
+    #           - folder2create_lst [list of string]: list of folder paths to create
+    #       Outputs:
+    #           -
+    #
+    ########################################           
+    
     for folder2create in folder2create_lst:
         if not os.path.exists(folder2create):
             os.makedirs(folder2create)
 
+# ************************************************************************** 
+
 def find_img_testing(path_large, contrast):
+    ########################################
+    #
+    #   Explore a database folder (path_large)...
+    #   ...and extract path to images for a given contrast (contrast)
+    #
+    #       Inputs:
+    #           - path_large [string]: path to database
+    #           - contrast [string]: contrast of interest ('t2', 't1', 't2s')
+    #       Outputs:
+    #           - path_img [list of string]: list of image path
+    #           - path_seg [list of string]: list of segmentation path
+    #
+    ########################################   
 
     center_lst, pathology_lst, path_img, path_seg = [], [], [], []
     for subj_fold in os.listdir(path_large):
         path_subj_fold = path_large + subj_fold + '/'
-        if os.path.isdir(path_subj_fold):
-            contrast_fold_lst = [contrast_fold for contrast_fold in os.listdir(path_subj_fold) if os.path.isdir(path_subj_fold+contrast_fold+'/')]
-            contrast_fold_lst_oI = [contrast_fold for contrast_fold in contrast_fold_lst 
-                                                                            if contrast_fold==contrast or contrast_fold.startswith(contrast+'_')]
-            if len(contrast_fold_lst_oI):
-                with open(path_subj_fold+'dataset_description.json') as data_file:    
-                    data_description = json.load(data_file)
-                    data_file.close()
 
+        if os.path.isdir(path_subj_fold):
+            contrast_fold_lst = [contrast_fold for contrast_fold in os.listdir(path_subj_fold) 
+                                                    if os.path.isdir(path_subj_fold+contrast_fold+'/')]
+            contrast_fold_lst_oI = [contrast_fold for contrast_fold in contrast_fold_lst 
+                                                    if contrast_fold==contrast or contrast_fold.startswith(contrast+'_')]
+            
+            # If this subject folder contains a subfolder related to the contrast of interest
+            if len(contrast_fold_lst_oI):
+
+                # Depending on the number of folder of interest:
                 if len(contrast_fold_lst_oI)>1:
+                    # In our case, we prefer axial images when available
                     ax_candidates = [tt for tt in contrast_fold_lst_oI if 'ax' in tt]
                     if len(ax_candidates):
                         contrast_fold_oI = ax_candidates[0]
@@ -43,12 +94,24 @@ def find_img_testing(path_large, contrast):
                 else:
                     contrast_fold_oI = contrast_fold_lst_oI[0]
 
+                # For each subject and for each contrast, we want to pick only one image
                 path_contrast_fold = path_subj_fold+contrast_fold_oI+'/'
+
+                # If segmentation_description.json is available
                 if os.path.exists(path_contrast_fold+'segmentation_description.json'):
+
                     with open(path_contrast_fold+'segmentation_description.json') as data_file:    
                         data_seg_description = json.load(data_file)
                         data_file.close()
+
+                    # If manual segmentation of the cord is available
                     if len(data_seg_description['cord']):
+
+                        # Extract data information from the dataset_description.json
+                        with open(path_subj_fold+'dataset_description.json') as data_file:    
+                            data_description = json.load(data_file)
+                            data_file.close()
+
                         path_img_cur = path_contrast_fold+contrast_fold_oI+'.nii.gz'
                         path_seg_cur = path_contrast_fold+contrast_fold_oI+'_seg_manual.nii.gz'
                         if os.path.exists(path_img_cur) and os.path.exists(path_seg_cur):
@@ -57,17 +120,21 @@ def find_img_testing(path_large, contrast):
                             center_lst.append(data_description['Center'])
                             pathology_lst.append(data_description['Pathology'])
                         else:
-                            print '\nIMG or SEG falta: ' + path_contrast_fold
-                            print path_img_cur
+                            print '\nWARNING: file lacks: ' + path_contrast_fold + '\n'
 
+    # Remove duplicates
     center_lst = list(set(center_lst))
+    center_lst = [center for center in center_lst if center != ""]
+    # Remove HC and non specified pathologies
     pathology_lst = [patho for patho in pathology_lst if patho != "" and patho != "HC"]
     pathology_dct = {x:pathology_lst.count(x) for x in pathology_lst}
 
+    print '\n\n***************Contrast of Interest: ' + cc + ' ***************'
+    print '# of Subjects: ' + str(len(path_img))
     print '# of Centers: ' + str(len(center_lst))
     print 'Centers: ' + ', '.join(center_lst)
+    print 'Pathologies:'
     print pathology_dct
-    print '# of Subjects: ' + str(len(path_img))
 
     return path_img, path_seg
 
@@ -139,7 +206,6 @@ def prepare_dataset(path_local, constrast_dct, path_sct_testing_large):
         folder2create_lst = [path_local_input_nii, path_local_input_img, path_local_gold]
         create_folders_local(folder2create_lst)
 
-        print '\n\n***************Contrast of Interest: ' + cc + ' ***************'
         path_fname_img, path_fname_seg = find_img_testing(path_sct_testing_large, cc)
 
         path_img2convert = transform_nii_img(path_fname_img, path_local_input_nii)
@@ -256,6 +322,86 @@ def pull_img_convert_nii_remove_img(path_local, path_ferguson, cc, nb_img):
                 os.system('rm -r ' + path_local_res_img + f)
 
 
+
+def compute_stats_file(fname_centerline, fname_gold_standard, fname_gold_standard_seg):
+
+    im_pred = Image(fname_centerline)
+    im_true = Image(fname_gold_standard)
+    im_true_seg = Image(fname_gold_standard_seg)
+
+    nx, ny, nz, nt, px, py, pz, pt = im_true.dim
+
+    count_slice, slice_coverage = 0, 0
+    mse_dist = []
+    for z in range(im_true.dim[2]):
+        slice_pred = im_pred.data[:,:,z]
+        slice_true = im_true.data[:,:,z]
+        slice_true_seg = im_true_seg.data[:,:,z]
+        if np.sum(im_true.data[:,:,z]):
+            x_true, y_true = [np.where(im_true.data[:,:,z] > 0)[i][0] for i in range(len(np.where(im_true.data[:,:,z] > 0)))]
+            x_pred, y_pred = [np.where(im_pred.data[:,:,z] > 0)[i][0] for i in range(len(np.where(im_pred.data[:,:,z] > 0)))]
+
+            xx_seg, yy_seg = np.where(im_true_seg.data[:,:,z]==1.0)
+            xx_yy = [[x,y] for x, y in zip(xx_seg,yy_seg)]
+            if [x_pred, y_pred] in xx_yy:
+                slice_coverage += 1
+
+            x_true, y_true = im_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], im_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
+            x_pred, y_pred = im_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], im_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
+
+            dist = ((x_true-x_pred))**2 + ((y_true-y_pred))**2
+            mse_dist.append(dist)
+
+            count_slice += 1
+
+    return sqrt(sum(mse_dist)/float(count_slice)), sqrt(max(mse_dist)), float(slice_coverage*100.0)/count_slice
+
+def compute_nii_stats(path_local, cc, nb_img):
+
+    path_local_nii = path_local + 'output_nii_' + cc + '_'+ str(nb_img) + '/'
+    path_local_res_pkl = path_local + 'output_pkl_' + cc + '_'+ str(nb_img) + '/'
+    path_local_gold = path_local + 'gold_' + cc + '/'
+    path_local_seg = path_local + 'input_nii_' + cc + '/'
+    fname_pkl_out = path_local_res_pkl + 'res_'
+
+    for f in os.listdir(path_local_nii):
+        if not f.startswith('.'):
+            print path_local_nii + f + '/'
+            path_res_cur = path_local_nii + f + '/'
+
+            training_subj = f.split('__')
+
+            if not os.path.isfile(fname_pkl_out + f + '.pkl'):
+
+                time_info = 0.0
+                mse_cur, max_move_cur, slice_coverage_cur = [], [], []
+                for ff in os.listdir(path_local_nii+f):
+                    if ff.endswith('_centerline_pred.nii.gz'):
+                        path_cur_pred = path_res_cur + ff
+                        path_cur_gold = path_local_gold + ff.split('_centerline_pred.nii.gz')[0] + '_centerline_gold.nii.gz'
+                        path_cur_gold_seg = path_local_seg + ff.split('_centerline_pred.nii.gz')[0] + '_seg.nii.gz'
+                        mse_cur.append(compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg)[0])
+                        max_move_cur.append(compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg)[1])
+                        slice_coverage_cur.append(compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg)[2])
+
+                    elif ff == 'time.txt':
+                        with open(path_local_nii + f + '/' + ff) as text_file:
+                            time_info = round(float(text_file.read()),2)
+        
+                save_dict = {}
+                save_dict['iteration'] = training_subj
+                if len(mse_cur):
+                    save_dict['avg_mse'] = round(np.mean(mse_cur),2)
+                    save_dict['avg_max_move'] = round(np.mean(max_move_cur),2)
+                    save_dict['cmpt_fail_subj_test'] = round(sum(elt >= 10.0 for elt in max_move_cur)*100.0/len(mse_cur),2)
+                    save_dict['slice_coverage'] = round(np.mean(slice_coverage_cur),2)
+                    save_dict['boostrap_time'] = time_info
+                else:
+                    save_dict['avg_mse'], save_dict['avg_max_move'], save_dict['cmpt_fail_subj_test'], save_dict['slice_coverage'], save_dict['boostrap_time'] = None, None, None, None, None
+                
+                print save_dict
+                pickle.dump(save_dict, open(fname_pkl_out + f + '.pkl', "wb"))
+
 ####################################################################################################################
 #   User Case
 
@@ -282,12 +428,35 @@ contrast_lst = ['t2']
 # *********************** PULL RESULTS FROM FERGUSON ***********************
 pull_img_convert_nii_remove_img(path_local_sdika, path_ferguson, 't2', 1)
 # pull_img_convert_nii_remove_img(path_local_sdika, path_ferguson, 't1', 1)
-    
+
+# *********************** COMPUTE STATS ***********************
+# compute_nii_stats(path_local_sdika, 't2', 1)
 
 
 
-#     # compute_nii_stats(path_local_res_nii, path_local_gold, path_local_input_nii, path_local_res_pkl + 'res_')
-    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ****************************      TO BE CLEANED      ****************************   
+
 #     fname_pkl = 'res_' + contrast + '_' + seg_ctr + '_' + str(nb_image_train) + '.pkl'
 #     # fail_list_t2_1_seg = ['twh_e24751', 'twh_e23699', 'bwh_CIS1_t2_sag', 'bwh_SP4_t2_sag', 'bwh_SP4_t2_sag_stir',
 #     #                         'paris_hc_42', 'paris_hc_84', 'paris_hc_82', 'paris_hc_116',
@@ -305,110 +474,7 @@ pull_img_convert_nii_remove_img(path_local_sdika, path_ferguson, 't2', 1)
 
 # elif part == 2:
 
-#     def pull_img_convert_nii_remove_img(path_ferguson, path_local_img, path_local_nii):
 
-#         # Pull .img results from ferguson
-#         os.system('scp -r ferguson:' + path_ferguson + ' ' + '/'.join(path_local_img.split('/')[:-2]) + '/')
-
-#         # Convert .img to .nii
-#         # Remove .img files
-#         for f in os.listdir(path_local_img):
-#             if not f.startswith('.'):
-#                 path_res_cur = path_local_nii + f + '/'
-#                 if not os.path.exists(path_res_cur):
-#                     os.makedirs(path_res_cur)
-
-#                 training_subj = f.split('__')
-
-#                 if os.path.isdir(path_local_img+f):
-#                     for ff in os.listdir(path_local_img+f):
-#                         if ff.endswith('_ctr.hdr'):
-
-#                             path_cur = path_local_img + f + '/' + ff
-#                             path_cur_out = path_res_cur + ff.split('_ctr')[0] + '_centerline_pred.nii.gz'
-#                             img = nib.load(path_cur)
-#                             nib.save(img, path_cur_out)
-
-#                         elif ff == 'time.txt':
-#                             os.rename(path_local_img + f + '/time.txt', path_local_nii + f + '/time.txt')
-
-#                     os.system('rm -r ' + path_local_img + f)
-
-#     def compute_stats_file(fname_centerline, fname_gold_standard, fname_gold_standard_seg):
-
-#         im_pred = Image(fname_centerline)
-#         im_true = Image(fname_gold_standard)
-#         print fname_centerline
-#         print fname_gold_standard
-#         im_true_seg = Image(fname_gold_standard_seg)
-
-#         nx, ny, nz, nt, px, py, pz, pt = im_true.dim
-
-#         count_slice, slice_coverage = 0, 0
-#         mse_dist = []
-#         for z in range(im_true.dim[2]):
-#             slice_pred = im_pred.data[:,:,z]
-#             slice_true = im_true.data[:,:,z]
-#             slice_true_seg = im_true_seg.data[:,:,z]
-#             if np.sum(im_true.data[:,:,z]):
-#                 x_true, y_true = [np.where(im_true.data[:,:,z] > 0)[i][0] for i in range(len(np.where(im_true.data[:,:,z] > 0)))]
-#                 x_pred, y_pred = [np.where(im_pred.data[:,:,z] > 0)[i][0] for i in range(len(np.where(im_pred.data[:,:,z] > 0)))]
-
-#                 xx_seg, yy_seg = np.where(im_true_seg.data[:,:,z]==1.0)
-#                 xx_yy = [[x,y] for x, y in zip(xx_seg,yy_seg)]
-#                 if [x_pred, y_pred] in xx_yy:
-#                     slice_coverage += 1
-
-#                 x_true, y_true = im_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], im_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
-#                 x_pred, y_pred = im_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], im_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
-
-#                 dist = ((x_true-x_pred))**2 + ((y_true-y_pred))**2
-#                 mse_dist.append(dist)
-
-#                 count_slice += 1
-
-#         return sqrt(sum(mse_dist)/float(count_slice)), sqrt(max(mse_dist)), float(slice_coverage*100.0)/count_slice
-
-#     def compute_nii_stats(path_local_nii, path_local_gold, path_local_seg, fname_pkl_out):
-
-#         for f in os.listdir(path_local_nii):
-#             if not f.startswith('.'):
-#                 print path_local_nii + f + '/'
-#                 path_res_cur = path_local_nii + f + '/'
-
-#                 training_subj = f.split('__')
-
-#                 if not os.path.isfile(fname_pkl_out + f + '.pkl'):
-
-#                     time_info = 0.0
-#                     mse_cur, max_move_cur, slice_coverage_cur = [], [], []
-#                     for ff in os.listdir(path_local_nii+f):
-#                         if ff.endswith('_centerline_pred.nii.gz'):
-#                             path_cur_pred = path_res_cur + ff
-#                             path_cur_gold = path_local_gold + ff.split('_centerline_pred.nii.gz')[0] + '_centerline_gold.nii.gz'
-#                             path_cur_gold_seg = path_local_seg + ff.split('_centerline_pred.nii.gz')[0] + '_seg.nii.gz'
-#                             print path_cur_pred
-#                             mse_cur.append(compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg)[0])
-#                             max_move_cur.append(compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg)[1])
-#                             slice_coverage_cur.append(compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg)[2])
-
-#                         elif ff == 'time.txt':
-#                             with open(path_local_nii + f + '/' + ff) as text_file:
-#                                 time_info = round(float(text_file.read()),2)
-            
-#                     save_dict = {}
-#                     save_dict['iteration'] = training_subj
-#                     if len(mse_cur):
-#                         save_dict['avg_mse'] = round(np.mean(mse_cur),2)
-#                         save_dict['avg_max_move'] = round(np.mean(max_move_cur),2)
-#                         save_dict['cmpt_fail_subj_test'] = round(sum(elt >= 10.0 for elt in max_move_cur)*100.0/len(mse_cur),2)
-#                         save_dict['slice_coverage'] = round(np.mean(slice_coverage_cur),2)
-#                         save_dict['boostrap_time'] = time_info
-#                     else:
-#                         save_dict['avg_mse'], save_dict['avg_max_move'], save_dict['cmpt_fail_subj_test'], save_dict['slice_coverage'], save_dict['boostrap_time'] = None, None, None, None, None
-                    
-#                     print save_dict
-#                     pickle.dump(save_dict, open(fname_pkl_out + f + '.pkl', "wb"))
 
 #     def display_stats(path_local_pkl, fname_out, fail_list=[]):
 
