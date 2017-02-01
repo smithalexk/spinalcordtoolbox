@@ -522,27 +522,24 @@ def prepare_prediction_cnn(path_local, model, cc, param_dct, thrsh):
 
     path_nii2convert_lst = []
     for fname_img in testing_lst:
-    # for fname_img in testing_lst[:25]:
         subject_name = fname_img.split('.')[0]
         fname_input = path_nii + subject_name + '.nii.gz'
         fname_output = path_output_nii_cnn + subject_name + '_pred.nii.gz'
 
-        # if not os.path.isfile(fname_output):
-        #     im_data = Image(fname_input)
+        if not os.path.isfile(fname_output):
+            im_data = Image(fname_input)
 
-        #     tick = time.time()
+            tick = time.time()
 
-        #     im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
+            im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
 
-        #     prediction_cnn(im_data, model, initial_resolution, initial_resize,
-        #                     thrsh, patch_size, fname_output)
+            prediction_cnn(im_data, model, initial_resolution, initial_resize,
+                            thrsh, patch_size, fname_output)
 
-        #     os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
-        
-        #     path_nii2convert_lst.append(fname_output)
-        if os.path.isfile(fname_output):
+            os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
         
             path_nii2convert_lst.append(fname_output)
+
     convert_nii2img(path_nii2convert_lst, path_output_img_cnn)
 
 
