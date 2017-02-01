@@ -885,6 +885,13 @@ def inter_group(path_local, cc, nb_img, mm, criteria_dct):
     plt.show()
 
 
+# ******************************************************************************************
+
+
+
+
+# ****************************      STEP 6 FUNCTIONS      *******************************
+
 
 def plot_best_trainer_results(path_local, cc, nb_img, mm):
 
@@ -909,12 +916,15 @@ def plot_best_trainer_results(path_local, cc, nb_img, mm):
     testing_dataset_lst = dataset_names_lst[:int(80.0*len(dataset_names_lst)/100.0)]
     validation_dataset_lst = dataset_names_lst[int(80.0*len(dataset_names_lst)/100.0):]
 
+    testing_dataset_smple_lst = [ff for fff in [f.split('__') for f in testing_dataset_lst] for ff in fff]
+    validation_dataset_smplt_lst = [ff for fff in [f.split('__') for f in validation_dataset_lst] for ff in fff]
+
     subj_test_dct = {}
     for subj_test in testing_dataset_lst:
         path_folder_cur = path_pkl + subj_test + '/'
 
-        for subj_test_test in testing_dataset_lst:
-            if subj_test != subj_test_test:
+        for subj_test_test in testing_dataset_smple_lst:
+            if not subj_test_test in subj_test.split('__'):
                 pkl_file = path_folder_cur + 'res_' + subj_test_test + '.pkl'
                 res_cur = pickle.load(open(pkl_file, 'r'))
                 if not subj_test in subj_test_dct:
@@ -925,13 +935,16 @@ def plot_best_trainer_results(path_local, cc, nb_img, mm):
     for subj in subj_test_dct:
         best_lst.append([subj, np.mean(subj_test_dct[subj])])
 
-    best_name = best_lst[[item[1] for item in best_lst].index(max([item[1] for item in best_lst]))]
+    if mm == 'zcoverage':
+        best_name = best_lst[[item[1] for item in best_lst].index(max([item[1] for item in best_lst]))]
+    else:
+        best_name = best_lst[[item[1] for item in best_lst].index(min([item[1] for item in best_lst]))]
     path_folder_best = path_pkl + best_name[0] + '/'
 
     res_dct = {}
 
     res_dct['validation'] = []
-    for subj_val in validation_dataset_lst:
+    for subj_val in validation_dataset_smplt_lst:
         pkl_file = path_folder_best + 'res_' + subj_val + '.pkl'
         res_cur = pickle.load(open(pkl_file, 'r'))
         res_dct['validation'].append(res_cur[mm])
@@ -943,6 +956,9 @@ def plot_best_trainer_results(path_local, cc, nb_img, mm):
             if not 'all' in res_dct:
                 res_dct['all'] = []
             res_dct['all'].append(res_cur[mm])
+            if not 'fname_test' in res_dct:
+                res_dct['fname_test'] = []
+            res_dct['fname_test'].append(pkl_id)
             for patho in patho_dct:
                 if pkl_id.split('_'+cc)[0] in patho_dct[patho]:
                     if str(patho) == 'HC':
@@ -958,7 +974,7 @@ def plot_best_trainer_results(path_local, cc, nb_img, mm):
                         res_dct[resol] = []
                     res_dct[resol].append(res_cur[mm])
 
-    print res_dct.keys()
+    pickle.dump(res_dct, open(path_plot + best_name[0] + '.pkl', "wb"))
 
     sns.set(style="whitegrid", palette="pastel", color_codes=True)
     group_labels = [['validation', 'all'], ['ax', 'iso'], ['HC', 'Patient']]
@@ -981,23 +997,162 @@ def plot_best_trainer_results(path_local, cc, nb_img, mm):
                 stg = 'Effectif: ' + str(len(res_dct[group]))
                 stg += '\nMean: ' + str(round(np.mean(res_dct[group]),2))
                 stg += '\nStd: ' + str(round(np.std(res_dct[group]),2))
+
                 if mm != 'zcoverage' and mm != 'avg_zcoverage':
                     stg += '\nMax: ' + str(round(np.max(res_dct[group]),2))
-                    a.text(0.3,np.max(res_dct[group]),stg,fontsize=15)
-                    plt.title('Best Trainer: ' + best_name[0] + ' - ' + group + ' Dataset - Metric = ' + mm + '[mm]')
+
+                    a.set_title(group + ' Dataset - Metric = ' + mm + '[mm]')
+
+                    if cc == 't2':
+                        y_lim_min, y_lim_max = 0.01, 30
+                    y_stg_loc = y_lim_max-10
+
                 else:
                     if cc == 't2':
-                        a.set_ylim([60,105])
+                        y_lim_min, y_lim_max = 60, 101
                     elif cc == 't1':
-                        a.set_ylim([85,101])
+                        y_lim_min, y_lim_max = 85, 101
+                    y_stg_loc = y_lim_min+20
+
                     stg += '\nMin: ' + str(round(np.min(res_dct[group]),2))
-                    a.text(0.3,np.min(res_dct[group]),stg,fontsize=15)
-                    a.set_title('Best Trainer: ' + best_name[0] + ' - ' + group + ' Dataset - Metric = Ctr_pred in Seg_manual [%]')
+                    
+                    a.set_title(group + ' Dataset - Metric = Ctr_pred in Seg_manual [%]')
+
+                
+                a.set_ylim([y_lim_min,y_lim_max])
+                
+                a.text(0.3, y_stg_loc, stg, fontsize=15)
+                    
+                a.text(-0.5, y_stg_loc, '# of training image: ' + str(len(best_name[0].split('__'))),fontsize=15)
+                for jj,bb in enumerate(best_name[0].split('__')):
+                    a.text(-0.5,y_stg_loc-jj-1,bb,fontsize=10)
+
         plt.savefig(path_plot + '_'.join(gg) + '_' + str(lambda_rdn) + '.png')
         plt.close()
 
 
+
+
 # ******************************************************************************************
+
+
+# ****************************      STEP 7 FUNCTIONS      *******************************
+
+def plot_comparison_classifier(path_local, cc, nb_img, llambda, mm):
+
+    path_pkl_sdika = path_local + 'output_pkl_' + cc + '_' + str(nb_img) + '/res_'
+    path_pkl_cnn = path_local + 'cnn_pkl_' + cc + '_' + str(llambda) + '/res_' + cc + '_' + str(llambda) + '_'
+    path_pkl_propseg = path_local + 'propseg_pkl_' + cc + '/res_' + cc + '_'
+    classifier_name_lst = ['ProgSeg', 'CNN+zRegularization', 'SVM+HOG+zRegularization']
+
+    path_output = path_local + 'plot_comparison_' + mm + '_' + cc + '_' + str(nb_img) + '_' + str(llambda) + '/'
+    fname_out = 'plot_comparison_' + mm + '_' + cc + '_' + str(nb_img) + '_' + str(llambda)
+    fname_out_pkl = fname_out + '.pkl'
+    fname_out_png = fname_out + '.png'
+ 
+    with open(path_local + 'cnn_dataset_lst_' + cc + '.pkl') as outfile:    
+        testing_lst = pickle.load(outfile)
+        outfile.close()
+
+    if not os.path.isfile(fname_out_pkl):
+        res_dct = {}
+        for classifier_path, classifier_name in zip([path_pkl_propseg, path_pkl_cnn, path_pkl_sdika], classifier_name_lst):
+            for subj in testing_lst:
+                fname_pkl_cur = classifier_path + subj + '.pkl'
+
+                with open(fname_pkl_cur) as outfile:    
+                    mm_cur = pickle.load(outfile)
+                    outfile.close()
+
+                if not classifier_name in res_dct:
+                    res_dct[classifier_name] = []
+
+                res_dct[classifier_name].append(mm_cur[mm])
+
+        print res_dct
+        pickle.dump(res_dct, open(fname_out_pkl, "wb"))
+
+    fig, axes = plt.subplots(1, 3, sharey='col', figsize=(30, 10))
+    cmpt = 1
+    for classifier_name in classifier_name_lst:
+        a = plt.subplot(1,3,cmpt)
+        sns.violinplot(data=res_dct[classifier_name], inner="quartile", cut=0, scale="count", sharey=True)
+        sns.swarmplot(data=res_dct[classifier_name], palette='deep', size=4)
+
+        stg = '# of detected cord: ' + str(len(res_dct[classifier_name]))
+        stg += '\nMean: ' + str(round(np.mean(res_dct[classifier_name]),2))
+        stg += '\nStd: ' + str(round(np.std(res_dct[classifier_name]),2))
+        if mm != 'zcoverage' and mm != 'avg_zcoverage':
+            stg += '\nMax: ' + str(round(np.max(res_dct[classifier_name]),2))
+            a.text(0.3,np.max(res_dct[classifier_name]),stg,fontsize=15)
+            plt.title('Contrast: ' + cc + ' - Metric = ' + mm + '[mm]')
+        else:
+            # if cc == 't2':
+            #     a.set_ylim([60,105])
+            # elif cc == 't1':
+            #     a.set_ylim([85,101])
+            stg += '\nMin: ' + str(round(np.min(res_dct[classifier_name]),2))
+            a.text(0.3,np.min(res_dct[classifier_name]),stg,fontsize=15)
+            plt.title('Contrast: ' + cc + ' - Metric = Ctr_pred in Seg_manual [%]')
+
+        cmpt += 1
+    
+    plt.savefig(fname_out_png)
+    plt.close()
+
+
+
+# ******************************************************************************************
+
+
+# ****************************      STEP 8 FUNCTIONS      *******************************
+
+def plot_comparison_nb_train(path_local, cc):
+
+    path_best_train_lst = [pp for pp in os.listdir(path_local) if pp.startswith('plot_best_train_' + cc + '_')]
+    mm_lst = [pp.split('_')[-1] for pp in path_best_train_lst]
+    nb_train_lst = [pp.split('_')[-2] for pp in path_best_train_lst]
+    path_best_train_lst = [path_local + pp + '/' + f for pp in path_best_train_lst for f in os.listdir(path_local + pp) if f.endswith('.pkl')]
+
+    path_best_train_dct = {}
+    for pp in path_best_train_lst:
+        for mm in mm_lst:
+            if mm in pp.split('/')[-2]:
+                if not mm in path_best_train_dct:
+                    path_best_train_dct[mm]={}
+                for nn in nb_train_lst:
+                    if nn in pp.split('/')[-2]:
+                        path_best_train_dct[mm][nn] = pp
+
+    res_best_train_dct = {}
+    for mm in mm_lst:
+        fname_test_lst = [pickle.load(open(f))['fname_test'] for f in path_best_train_dct[mm]]
+        print fname_test_lst
+        print len(fname_test_lst[0])
+        print len(fname_test_lst[1])
+        fname_test_lst = list(set(fname_test_lst[0]).intersection(*fname_test_lst[1:]))
+        print len(fname_test_lst)
+
+        res_best_train_dct[mm] = {}
+        for f in path_best_train_dct[mm]:
+            with open(f) as outfile:    
+                res = pickle.load(outfile)
+                outfile.close()
+
+            nn_cur = f.split('/')[-2].split('_')[-2]
+            res_best_train_dct[nn_cur] = []
+            for test_smple in fname_test_lst:
+                res_best_train_dct[mm][nn_cur].append(res['all'][res['fname_test'].index(test_smple)])
+
+
+
+
+    nb_col_plot = len(path_best_train_dct)
+    nb_row_plot = len(path_best_train_dct[list(path_best_train_dct.keys())[0]])
+
+
+# ******************************************************************************************
+
 
 # ****************************      USER CASE      *****************************************
 
@@ -1106,7 +1261,13 @@ if __name__ == '__main__':
 
                 inter_group(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage', resol_dct)
             elif step == 6:
+                plot_best_trainer_results(path_local_sdika, contrast_of_interest, nb_train_img, 'maxmove')
                 plot_best_trainer_results(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage')
+            elif step == 7:
+                plot_comparison_classifier(path_local_sdika, contrast_of_interest, nb_train_img, 0.35, 'zcoverage')
+            elif step == 8:
+                plot_comparison_nb_train(path_local_sdika, contrast_of_interest)
+
             else:
                 print USAGE_STRING
 
