@@ -515,7 +515,6 @@ def prepare_prediction_cnn(path_local, model, cc, param_dct, thrsh):
     patch_size = param_dct['patch_size']
     initial_resolution = param_dct['initial_resolution']
     initial_resize = param_dct['initial_resize']
-    initial_list_offset = param_dct['initial_list_offset']
 
     with open(path_local + 'cnn_dataset_lst_' + cc + '.pkl') as outfile:    
         testing_lst = pickle.load(outfile)
@@ -528,20 +527,22 @@ def prepare_prediction_cnn(path_local, model, cc, param_dct, thrsh):
         fname_input = path_nii + subject_name + '.nii.gz'
         fname_output = path_output_nii_cnn + subject_name + '_pred.nii.gz'
 
-        if not os.path.isfile(fname_output):
-            im_data = Image(fname_input)
+        # if not os.path.isfile(fname_output):
+        #     im_data = Image(fname_input)
 
-            tick = time.time()
+        #     tick = time.time()
 
-            im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
+        #     im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
 
-            prediction_cnn(im_data, model, initial_resolution, initial_resize, initial_list_offset, 
-                            thrsh, patch_size, fname_output)
+        #     prediction_cnn(im_data, model, initial_resolution, initial_resize,
+        #                     thrsh, patch_size, fname_output)
 
-            os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
+        #     os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
+        
+        #     path_nii2convert_lst.append(fname_output)
+        if os.path.isfile(fname_output):
         
             path_nii2convert_lst.append(fname_output)
-
     convert_nii2img(path_nii2convert_lst, path_output_img_cnn)
 
 
@@ -665,7 +666,7 @@ def _compute_stats_folder(subj_name_lst, cc, llambda, folder_out, fname_out):
 def compute_dataset_stats(path_local, cc, llambda):
 
     path_local_nii = path_local + 'cnn_output_nii_' + cc + '_' + llambda + '/'
-    path_local_res_pkl = path_local + 'cnn_pkl' + '/'
+    path_local_res_pkl = path_local + 'cnn_pkl_' + cc + '_' + llambda + '/'
     path_local_gold = path_local + 'gold_' + cc + '/'
     path_local_seg = path_local + 'input_nii_' + cc + '/'
     fname_pkl_out = path_local_res_pkl + 'res_' + cc + '_' + llambda + '_'
@@ -692,7 +693,7 @@ def compute_dataset_stats(path_local, cc, llambda):
 
 def display_results(path_local, cc):
 
-    path_local_res_pkl = path_local + 'cnn_pkl' + '/'
+    path_local_res_pkl = path_local + 'cnn_pkl_' + cc + '_' + llambda + '/'
 
     for f in os.listdir(path_local_res_pkl):
         if f.endswith('_all.pkl') and f.startswith('res_'+cc):
