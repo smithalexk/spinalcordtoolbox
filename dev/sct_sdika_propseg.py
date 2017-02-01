@@ -255,18 +255,46 @@ def plot_comparison_nb_train(path_local, cc):
             for test_smple in fname_test_lst:
                 res_best_train_dct[mm][f].append(res['all'][res['fname_test'].index(test_smple)])
 
-    nb_col_plot = len(path_best_train_dct)
-    nb_row_plot = len(path_best_train_dct[list(path_best_train_dct.keys())[0]])
+    nb_row_plot = len(path_best_train_dct)
+    nb_col_plot = len(path_best_train_dct[list(path_best_train_dct.keys())[0]])
 
     sns.set(style="whitegrid", palette="pastel", color_codes=True)
-    fig, axes = plt.subplots(nb_row_plot, nb_col_plot, sharey='col', figsize=(10*nb_row_plot, 10*nb_col_plot))
+    fig, axes = plt.subplots(nb_row_plot, nb_col_plot, sharey='col', figsize=(8*nb_col_plot, 8*nb_row_plot))
     cmpt = 1
-    print mm_lst
+    color_lst = sns.color_palette("hls", max([int(ll) for ll in list(path_best_train_dct[list(path_best_train_dct.keys())[0]].keys())]))
+    fig.subplots_adjust(left=0.05, bottom=0.05)
     for mm in mm_lst:
         for f in res_best_train_dct[mm]:
             a = plt.subplot(nb_row_plot, nb_col_plot,cmpt)
-            sns.violinplot(data=res_best_train_dct[mm][f], inner="quartile", cut=0, scale="count", sharey=True)
+            sns.violinplot(data=res_best_train_dct[mm][f], inner="quartile", cut=0, scale="count", sharey=True, color=color_lst[int(f)-1])
             sns.swarmplot(data=res_best_train_dct[mm][f], palette='deep', size=4)
+            a.set_ylabel(mm)
+            a.set_xlabel('# of training image: ' + f)
+
+            stg = '# of testing subj: ' + str(len(res_best_train_dct[mm][f]))
+            stg += '\nMean: ' + str(round(np.mean(res_best_train_dct[mm][f]),2))
+            stg += '\nStd: ' + str(round(np.std(res_best_train_dct[mm][f]),2))
+
+            if mm != 'zcoverage':
+                stg += '\nMax: ' + str(round(np.max(res_best_train_dct[mm][f]),2))
+
+                if cc == 't2':
+                    y_lim_min, y_lim_max = 0.01, 30
+                y_stg_loc = y_lim_max-10
+
+            else:
+                stg += '\nMin: ' + str(round(np.min(res_best_train_dct[mm][f]),2))
+
+                if cc == 't2':
+                    y_lim_min, y_lim_max = 60, 101
+                elif cc == 't1':
+                    y_lim_min, y_lim_max = 85, 101
+                y_stg_loc = y_lim_min+20
+
+            a.set_ylim([y_lim_min,y_lim_max])
+            
+            a.text(0.3, y_stg_loc, stg, fontsize=15)
+
             cmpt += 1
     plt.show()
 

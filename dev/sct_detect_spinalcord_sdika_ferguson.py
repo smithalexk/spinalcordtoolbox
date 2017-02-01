@@ -32,7 +32,7 @@ if len(path_sub_train):
 	os.makedirs(path_ferguson_res_img)
 
 	txt_name = [f for f in os.listdir(path_sub_train) if f.endswith('.txt') and not '_ctr' in f]
-	for tt in txt_name:
+	for zz,tt in enumerate(txt_name):
 		path_txt = path_sub_train + tt
 		path_txt_ctr = path_sub_train + tt.split('.')[0] + '_ctr.txt'
 		
@@ -43,7 +43,12 @@ if len(path_sub_train):
 		id_train_subj = [line.rstrip('\n').split('/')[-1] for line in open(path_txt)]
 
 		path_res_cur = path_ferguson_res_img + '__'.join(id_train_subj) + '/'
-		os.system('mkdir ' + path_res_cur)
+
+		try:
+			os.system('mkdir ' + path_res_cur)
+		except OSError:
+			os.system('mkdir ' + path_ferguson_res_img + str(zz).zfill(3) + '/')
+
 
 		for ss_test in subj_id:
 			if not ss_test in id_train_subj:

@@ -526,19 +526,21 @@ def prepare_prediction_cnn(path_local, model, cc, param_dct, thrsh):
         fname_input = path_nii + subject_name + '.nii.gz'
         fname_output = path_output_nii_cnn + subject_name + '_pred.nii.gz'
 
-        if not os.path.isfile(fname_output):
-            im_data = Image(fname_input)
+        if not fname_output == '/Users/chgroc/data/data_sdika/cnn_nii_t2/mgh-3t_marco_005E_t2_pred.nii.gz':
+            if not os.path.isfile(fname_output):
+                print fname_output
+                im_data = Image(fname_input)
 
-            tick = time.time()
+                tick = time.time()
 
-            im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
+                im_data.data = 255.0 * (im_data.data - np.percentile(im_data.data, 0)) / np.abs(np.percentile(im_data.data, 0) - np.percentile(im_data.data, 100))
 
-            prediction_cnn(im_data, model, initial_resolution, initial_resize,
-                            thrsh, patch_size, fname_output)
+                prediction_cnn(im_data, model, initial_resolution, initial_resize,
+                                thrsh, patch_size, fname_output)
 
-            os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
-        
-            path_nii2convert_lst.append(fname_output)
+                os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
+            
+                path_nii2convert_lst.append(fname_output)
 
     convert_nii2img(path_nii2convert_lst, path_output_img_cnn)
 
@@ -772,18 +774,19 @@ if __name__ == '__main__':
     if not step:
         model = init_cnn_model(path_model)
         prepare_prediction_cnn(path_local_sdika, model, contrast_of_interest, grid_search_dct, threshold)
+        # FAIRE UN PULL DES RESULTATS FERGUSSON PUIS PUSH NEW RESULTS
 
-    elif step == 1:
-        send_dataCNN2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
+    # elif step == 1:
+    #     send_dataCNN2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
 
-    elif step == 2:
-        pull_CNNimg_convert_nii_remove_img(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
+    # elif step == 2:
+    #     pull_CNNimg_convert_nii_remove_img(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
 
-    elif step == 3:
-        compute_dataset_stats(path_local_sdika, contrast_of_interest, llambda)
+    # elif step == 3:
+    #     compute_dataset_stats(path_local_sdika, contrast_of_interest, llambda)
 
-    elif step == 4:
-        display_results(path_local_sdika, contrast_of_interest)
+    # elif step == 4:
+    #     display_results(path_local_sdika, contrast_of_interest)
 
     print TODO_STRING
 

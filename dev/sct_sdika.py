@@ -1220,7 +1220,7 @@ if __name__ == '__main__':
 
             if not step:
                 # Prepare [contrast] data
-                prepare_dataset(path_local_sdika, [contrast_of_interest], path_sct_testing_large)
+                # prepare_dataset(path_local_sdika, [contrast_of_interest], path_sct_testing_large)
                 
                 # Send Script to Ferguson Station
                 os.system('scp ' + fname_local_script + ' ferguson:' + path_ferguson)
