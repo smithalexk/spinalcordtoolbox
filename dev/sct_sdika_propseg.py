@@ -21,6 +21,9 @@ from operator import itemgetter
 import time
 import argparse
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 
 def create_folders_local(folder2create_lst):
@@ -28,243 +31,6 @@ def create_folders_local(folder2create_lst):
     for folder2create in folder2create_lst:
         if not os.path.exists(folder2create):
             os.makedirs(folder2create)
-
-def find_img_testing(path_large, contrast):
-
-    center_lst, pathology_lst, path_img, path_seg = [], [], [], []
-    for subj_fold in os.listdir(path_large):
-        path_subj_fold = path_large + subj_fold + '/'
-        if os.path.isdir(path_subj_fold):
-            contrast_fold_lst = [contrast_fold for contrast_fold in os.listdir(path_subj_fold) if os.path.isdir(path_subj_fold+contrast_fold+'/')]
-            contrast_fold_lst_oI = [contrast_fold for contrast_fold in contrast_fold_lst 
-                                                                            if contrast_fold==contrast or contrast_fold.startswith(contrast+'_')]
-            if len(contrast_fold_lst_oI):
-                with open(path_subj_fold+'dataset_description.json') as data_file:    
-                    data_description = json.load(data_file)
-                    data_file.close()
-
-                if len(contrast_fold_lst_oI)>1:
-                    ax_candidates = [tt for tt in contrast_fold_lst_oI if 'ax' in tt]
-                    if len(ax_candidates):
-                        contrast_fold_oI = ax_candidates[0]
-                    else:
-                        contrast_fold_oI = contrast_fold_lst_oI[0]                                               
-                else:
-                    contrast_fold_oI = contrast_fold_lst_oI[0]
-
-                path_contrast_fold = path_subj_fold+contrast_fold_oI+'/'
-                if os.path.exists(path_contrast_fold+'segmentation_description.json'):
-                    with open(path_contrast_fold+'segmentation_description.json') as data_file:    
-                        data_seg_description = json.load(data_file)
-                        data_file.close()
-                    if len(data_seg_description['cord']):
-                        path_img_cur = path_contrast_fold+contrast_fold_oI+'.nii.gz'
-                        path_seg_cur = path_contrast_fold+contrast_fold_oI+'_seg_manual.nii.gz'
-                        if os.path.exists(path_img_cur) and os.path.exists(path_seg_cur):
-                            path_img.append(path_img_cur)
-                            path_seg.append(path_seg_cur)
-                            center_lst.append(data_description['Center'])
-                            pathology_lst.append(data_description['Pathology'])
-                        else:
-                            print '\nIMG or SEG falta: ' + path_contrast_fold
-                            print path_img_cur
-
-    center_lst = list(set(center_lst))
-    pathology_lst = [patho for patho in pathology_lst if patho != "" and patho != "HC"]
-    pathology_dct = {x:pathology_lst.count(x) for x in pathology_lst}
-
-    print '# of Centers: ' + str(len(center_lst))
-    print 'Centers: ' + ', '.join(center_lst)
-    print pathology_dct
-    print '# of Subjects: ' + str(len(path_img))
-
-    return path_img, path_seg
-
-def transform_nii_img(img_lst, path_out):
-
-    path_img2convert = []
-    for img_path in img_lst:
-        path_cur = img_path
-        path_cur_out = path_out + '_'.join(img_path.split('/')[5:7]) + '.nii.gz'
-        if not os.path.isfile(path_cur_out):
-            shutil.copyfile(path_cur, path_cur_out)
-            os.system('sct_image -i ' + path_cur_out + ' -type int16 -o ' + path_cur_out)
-            os.system('sct_image -i ' + path_cur_out + ' -setorient RPI -o ' + path_cur_out)
-        path_img2convert.append(path_cur_out)
-
-    return path_img2convert
-
-def transform_nii_seg(seg_lst, path_out, path_gold):
-
-    path_seg2convert = []
-    for seg_path in seg_lst:
-        path_cur = seg_path
-        path_cur_out = path_out + '_'.join(seg_path.split('/')[5:7]) + '_seg.nii.gz'
-        if not os.path.isfile(path_cur_out):
-            shutil.copyfile(path_cur, path_cur_out)
-            os.system('sct_image -i ' + path_cur_out + ' -setorient RPI -o ' + path_cur_out)
-
-        path_cur_ctr = path_cur_out.split('.')[0] + '_centerline.nii.gz'
-        if not os.path.isfile(path_cur_ctr):
-            os.chdir(path_out)
-            os.system('sct_process_segmentation -i ' + path_cur_out + ' -p centerline -ofolder ' + path_out)
-            os.system('sct_image -i ' + path_cur_ctr + ' -type int16')
-            path_input_header = path_cur_out.split('_seg')[0] + '.nii.gz'
-            os.system('sct_image -i ' + path_input_header + ' -copy-header ' + path_cur_ctr)
-
-        path_cur_gold = path_gold + '_'.join(seg_path.split('/')[5:7]) + '_centerline_gold.nii.gz'
-        if not os.path.isfile(path_cur_gold) and os.path.isfile(path_cur_ctr):
-            shutil.copyfile(path_cur_ctr, path_cur_gold)
-
-        if os.path.isfile(path_cur_out):
-            path_seg2convert.append(path_cur_out)
-        if os.path.isfile(path_cur_ctr):
-            path_seg2convert.append(path_cur_ctr)
-
-    return path_seg2convert
-
-
-def convert_nii2img(path_nii2convert, path_out):
-
-    fname_img = []
-    for img in path_nii2convert:
-        path_cur = img
-        path_cur_out = path_out + img.split('.')[0].split('/')[-1] + '.img'
-        if not img.split('.')[0].split('/')[-1].endswith('_seg') and not img.split('.')[0].split('/')[-1].endswith('_seg_centerline'):
-            fname_img.append(img.split('.')[0].split('/')[-1] + '.img')
-        if not os.path.isfile(path_cur_out):
-            os.system('sct_convert -i ' + path_cur + ' -o ' + path_cur_out)
-
-    return fname_img
-
-
-def prepare_dataset(path_local, constrast_dct, path_sct_testing_large):
-
-    dataset_dict = {}
-    for cc in constrast_dct:
-    
-        path_local_gold = path_local + 'gold_' + cc + '/'
-        path_local_input_nii = path_local + 'input_nii_' + cc + '/'
-        path_local_input_img = path_local + 'input_img_' + cc + '/'
-        folder2create_lst = [path_local_input_nii, path_local_input_img, path_local_gold]
-        create_folders_local(folder2create_lst)
-
-        print '\n\n***************Contrast of Interest: ' + cc + ' ***************'
-        path_fname_img, path_fname_seg = find_img_testing(path_sct_testing_large, cc)
-
-        path_img2convert = transform_nii_img(path_fname_img, path_local_input_nii)
-        path_seg2convert = transform_nii_seg(path_fname_seg, path_local_input_nii, path_local_gold)
-        path_imgseg2convert = path_img2convert + path_seg2convert
-        fname_img_lst = convert_nii2img(path_imgseg2convert, path_local_input_img)
-        dataset_dict[cc] = fname_img_lst
-
-    pickle.dump(dataset_dict, open(path_local + 'dataset_dict.pkl', "wb"))
-
-def prepare_train(path_local, path_outdoor, cc, nb_img):
-
-    print '\nExperiment: '
-    print '... contrast: ' + cc
-    print '... nb image used for training: ' + str(nb_img) + '\n'
-
-    path_outdoor_cur = path_outdoor + 'input_img_' + cc + '/'
-
-    path_local_res_img = path_local + 'output_img_' + cc + '_'+ str(nb_img) + '/'
-    path_local_res_nii = path_local + 'output_nii_' + cc + '_'+ str(nb_img) + '/'
-    path_local_res_pkl = path_local + 'output_pkl_' + cc + '_'+ str(nb_img) + '/'
-    path_local_train = path_local + 'input_train_' + cc + '_'+ str(nb_img) + '/'
-    folder2create_lst = [path_local_train, path_local_res_img, path_local_res_nii, path_local_res_pkl]
-
-    with open(path_local + 'dataset_dict.pkl') as outfile:    
-        data_pkl = pickle.load(outfile)
-        outfile.close()
-
-    fname_subj_lst = data_pkl[cc]
-
-    nb_sub_train = int(float(len(fname_subj_lst))/(50*nb_img))+1
-    path_folder_sub_train = []
-    for i in range(nb_sub_train):
-        path2create = path_local_train + str(i).zfill(3) + '/'
-        path_folder_sub_train.append(path2create)
-        folder2create_lst.append(path2create)
-
-    create_folders_local(folder2create_lst)
-
-    if os.listdir(path2create) == []: 
-        path_fname_img_rdn = [f.split('.')[0] for f in fname_subj_lst]    
-        random.shuffle(path_fname_img_rdn)
-        tuple_fname_multi = []
-        for j in range(0, len(fname_subj_lst), nb_img):
-            s = path_fname_img_rdn[j:j+nb_img]
-            if len(path_fname_img_rdn[j:j+nb_img])==nb_img:
-                tuple_fname_multi.append(s)
-
-        for i, tt in enumerate(tuple_fname_multi):
-            stg, stg_seg = '', ''
-            for tt_tt in tt:
-                stg += path_outdoor_cur + tt_tt + '\n'
-                stg_seg += path_outdoor_cur + tt_tt + '_seg' + '\n'
-            path2save = path_folder_sub_train[int(float(i)/50)]
-            with open(path2save + str(i).zfill(3) + '.txt', 'w') as text_file:
-                text_file.write(stg)
-                text_file.close()
-            with open(path2save + str(i).zfill(3) + '_ctr.txt', 'w') as text_file:
-                text_file.write(stg_seg)
-                text_file.close()
-
-    return path_local_train
-
-
-def send_data2ferguson(path_local, path_ferguson, cc, nb_img):
-
-    path_local_train_cur = prepare_train(path_local, path_ferguson, cc, nb_img)
-
-    pickle_ferguson = {
-                        'contrast': cc,
-                        'nb_image_train': nb_img
-                        }
-    path_pickle_ferguson = path_local + 'ferguson_config.pkl'
-    pickle.dump(pickle_ferguson, open(path_pickle_ferguson, "wb"))
-
-    os.system('scp -r ' + path_local + 'input_img_' + contrast_of_interest + '/' + ' ferguson:' + path_ferguson)
-    os.system('scp -r ' + path_local_train_cur + ' ferguson:' + path_ferguson)
-    os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
-
-
-
-def pull_img_convert_nii_remove_img(path_local, path_ferguson, cc, nb_img):
-
-    path_ferguson_res = path_ferguson + 'output_img_' + cc + '_'+ str(nb_img) + '/'
-    path_local_res_img = path_local + 'output_img_' + cc + '_'+ str(nb_img) + '/'
-    path_local_res_nii = path_local + 'output_nii_' + cc + '_'+ str(nb_img) + '/'
-
-    # Pull .img results from ferguson
-    os.system('scp -r ferguson:' + path_ferguson_res + ' ' + '/'.join(path_local_res_img.split('/')[:-2]) + '/')
-
-    # Convert .img to .nii
-    # Remove .img files
-    for f in os.listdir(path_local_res_img):
-        if not f.startswith('.'):
-            path_res_cur = path_local_res_nii + f + '/'
-            if not os.path.exists(path_res_cur):
-                os.makedirs(path_res_cur)
-
-            training_subj = f.split('__')
-
-            if os.path.isdir(path_local_res_img+f):
-                for ff in os.listdir(path_local_res_img+f):
-                    if ff.endswith('_ctr.hdr'):
-
-                        path_cur = path_local_res_img + f + '/' + ff
-                        path_cur_out = path_res_cur + ff.split('_ctr')[0] + '_centerline_pred.nii.gz'
-                        img = nib.load(path_cur)
-                        nib.save(img, path_cur_out)
-
-                    elif ff == 'time.txt':
-                        os.rename(path_local_res_img + f + '/time.txt', path_local_res_nii + f + '/time.txt')
-
-                os.system('rm -r ' + path_local_res_img + f)
-
-
 
 ########## NEW
 def prepare_dataset_cnn(path_local, cc, path_train_cnn):
@@ -287,77 +53,11 @@ def prepare_dataset_cnn(path_local, cc, path_train_cnn):
     pickle.dump(fname_testing_img, output_file)
     output_file.close()
 
-
-def extract_patches_from_image(image_file, patches_coordinates, patch_size=32, slice_of_interest=None):
-    result = []
-    for k in range(len(patches_coordinates)):
-        if slice_of_interest is None:
-            ind = [patches_coordinates[k][0], patches_coordinates[k][1], patches_coordinates[k][2]]
-        else:
-            ind = [patches_coordinates[k][0], patches_coordinates[k][1], slice_of_interest]
-
-        # Transform voxel coordinates to physical coordinates to deal with different resolutions
-        # 1. transform ind to physical coordinates
-        ind_phys = image_file.transfo_pix2phys([ind])[0]
-        # 2. create grid around ind  - , ind_phys[2]
-        grid_physical = np.mgrid[ind_phys[0] - patch_size / 2:ind_phys[0] + patch_size / 2, ind_phys[1] - patch_size / 2:ind_phys[1] + patch_size / 2]
-        # 3. transform grid to voxel coordinates
-        coord_x = grid_physical[0, :, :].ravel()
-        coord_y = grid_physical[1, :, :].ravel()
-        coord_physical = [[coord_x[i], coord_y[i], ind_phys[2]] for i in range(len(coord_x))]
-        grid_voxel = np.array(image_file.transfo_phys2continuouspix(coord_physical))
-        np.set_printoptions(threshold=np.inf)
-        # 4. interpolate image on the grid, deal with edges
-        patch = np.reshape(image_file.get_values(np.array([grid_voxel[:, 0], grid_voxel[:, 1], grid_voxel[:, 2]]), interpolation_mode=1, border='reflect'), (patch_size, patch_size))
-
-        if patch.shape[0] == patch_size and patch.shape[1] == patch_size:
-            result.append(np.expand_dims(patch, axis=0))
-    if len(result) != 0:
-        return np.concatenate(result, axis=0)
-    else:
-        return None
-
-def prediction_cnn(im_data, model, initial_resolution, initial_resize, threshold, patch_size, path_output):
-
-    time_prediction = time.time()
-
-    nx, ny, nz, nt, px, py, pz, pt = im_data.dim
-    nb_voxels_image = nx * ny * nz
-
-    # first round of patch prediction
-    initial_coordinates_x = range(int(initial_resize[0]*nx), nx-int(initial_resize[0]*nx), initial_resolution[0])
-    initial_coordinates_y = range(int(initial_resize[1]*ny), ny-int(initial_resize[1]*ny), initial_resolution[1])
-    X, Y = np.meshgrid(initial_coordinates_x, initial_coordinates_y)
-    X, Y = X.ravel(), Y.ravel()
-    initial_coordinates = [[X[i], Y[i]] for i in range(len(X))]
-
-    print '... Initial prediction:\n'
-    input_image = im_data.copy()
-    input_image.data *= 0
-    for slice_number in range(0, nz, initial_resolution[2]):
-        print '... ... slice #' + str(slice_number) + '/' + str(nz)
-        patches = extract_patches_from_image(im_data, initial_coordinates, patch_size=patch_size, slice_of_interest=slice_number)
-        patches = np.asarray(patches, dtype=int)
-        patches = patches.reshape(patches.shape[0], patches.shape[1], patches.shape[2])
-
-        X_test = patches
-        y_pred = model.predict(X_test)
-        y_pred = y_pred[:,1]
-
-        for i,pp in enumerate(y_pred):
-            input_image.data[initial_coordinates[i][0], initial_coordinates[i][1], slice_number] = pp
-
-    input_image.setFileName(path_output)
-    input_image.save()
-
-    print '\n... Time to predict cord location: ' + str(np.round(time.time() - time_prediction)) + ' seconds'
-
-def prepare_prediction_propseg(path_local, cc):
+def prediction_propseg(path_local, cc):
 
     path_nii = path_local + 'input_nii_' + cc + '/'
     path_output_nii_propseg = path_local + 'propseg_nii_' + cc + '/'
-    path_output_img_propseg = path_local + 'propseg_img_' + cc + '/'
-    create_folders_local([path_output_nii_propseg, path_output_img_propseg])
+    create_folders_local([path_output_nii_propseg])
 
     with open(path_local + 'cnn_dataset_lst_' + cc + '.pkl') as outfile:    
         testing_lst = pickle.load(outfile)
@@ -367,58 +67,25 @@ def prepare_prediction_propseg(path_local, cc):
         cc = 't2'
 
     path_nii2convert_lst = []
-    for fname_img in testing_lst[:1]:
+    for fname_img in testing_lst:
         subject_name = fname_img.split('.')[0]
         fname_input = path_nii + subject_name + '.nii.gz'
         fname_output = path_output_nii_propseg + subject_name + '_pred.nii.gz'
 
-        try:
-            os.system('sct_propseg -i ' + fname_input + ' -c ' + cc + ' -ofolder ' + path_output_nii_propseg + ' -centerline-binary')
-        except:
-            print 'hii'
+        os.system('sct_propseg -i ' + fname_input + ' -c ' + cc + ' -ofolder ' + path_output_nii_propseg + ' -centerline-binary')
 
-        # os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
-        
-        # path_nii2convert_lst.append(fname_output)
+        fname_seg = path_output_nii_propseg + subject_name + '_seg.nii.gz'
+        if os.path.isfile(fname_seg):
+            os.remove(fname_seg)
+            os.rename(path_output_nii_propseg + subject_name + '_centerline.nii.gz', fname_output)
+        else:
+            im_data = Image(fname_input)
+            im_pred = im_data.copy()
+            im_pred.data *= 0
+            im_pred.setFileName(fname_output)
+            im_pred.save()
 
-    # convert_nii2img(path_nii2convert_lst, path_output_img_cnn)
-
-
-def send_dataCNN2ferguson(path_local, path_ferguson, cc, llambda):
-
-    pickle_ferguson = {
-                        'contrast': cc,
-                        'lambda': llambda
-                        }
-    path_pickle_ferguson = path_local + 'ferguson_cnn_config.pkl'
-    pickle.dump(pickle_ferguson, open(path_pickle_ferguson, "wb"))
-
-    os.system('scp -r ' + path_local + 'cnn_img_' + cc + '/' + ' ferguson:' + path_ferguson)
-    os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
-
-
-def pull_CNNimg_convert_nii_remove_img(path_local, path_ferguson, cc, llambda):
-
-    path_ferguson_res = path_ferguson + 'cnn_output_img_' + cc + '_' + llambda + '/'
-    path_local_res_img = path_local + 'cnn_output_img_' + cc + '_' + llambda + '/'
-    path_local_res_nii = path_local + 'cnn_output_nii_' + cc + '_' + llambda + '/'
-
-    create_folders_local([path_local_res_nii])
-
-    # Pull .img results from ferguson
-    os.system('scp -r ferguson:' + path_ferguson_res + ' ' + path_local)
-
-    # Convert .img to .nii
-    # Remove .img files
-    for ff in os.listdir(path_local_res_img):
-        if ff.endswith('_ctr.hdr'):
-            fname_cur = path_local_res_img + ff
-            fname_cur_out = path_local_res_nii + ff.split('_ctr')[0] + '_centerline_pred.nii.gz'
-            img = nib.load(fname_cur)
-            nib.save(img, fname_cur_out)
-
-    os.system('rm -r ' + path_local_res_img)
-
+        os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
 
 def _compute_stats(img_pred, img_true, img_seg_true):
     """
@@ -439,28 +106,34 @@ def _compute_stats(img_pred, img_true, img_seg_true):
     for z in range(img_true.dim[2]):
 
         if np.sum(img_true.data[:,:,z]):
-            x_true, y_true = [np.where(img_true.data[:,:,z] > 0)[i][0] 
-                                for i in range(len(np.where(img_true.data[:,:,z] > 0)))]
-            x_pred, y_pred = [np.where(img_pred.data[:,:,z] > 0)[i][0]
-                                for i in range(len(np.where(img_pred.data[:,:,z] > 0)))]
-           
-            xx_seg, yy_seg = np.where(img_seg_true.data[:,:,z]==1.0)
-            xx_yy = [[x,y] for x, y in zip(xx_seg,yy_seg)]
-            if [x_pred, y_pred] in xx_yy:
-                slice_coverage += 1
+            if np.sum(img_pred.data[:,:,z]):
+                x_true, y_true = [np.where(img_true.data[:,:,z] > 0)[i][0] 
+                                    for i in range(len(np.where(img_true.data[:,:,z] > 0)))]
+                x_pred, y_pred = [np.where(img_pred.data[:,:,z] > 0)[i][0]
+                                    for i in range(len(np.where(img_pred.data[:,:,z] > 0)))]
+               
+                xx_seg, yy_seg = np.where(img_seg_true.data[:,:,z]==1.0)
+                xx_yy = [[x,y] for x, y in zip(xx_seg,yy_seg)]
+                if [x_pred, y_pred] in xx_yy:
+                    slice_coverage += 1
 
-            x_true, y_true = img_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], img_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
-            x_pred, y_pred = img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
+                x_true, y_true = img_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], img_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
+                x_pred, y_pred = img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
 
-            dist = ((x_true-x_pred))**2 + ((y_true-y_pred))**2
-            mse_dist.append(dist)
+                dist = ((x_true-x_pred))**2 + ((y_true-y_pred))**2
+                mse_dist.append(dist)
 
             count_slice += 1
 
+    print len(mse_dist), count_slice
     if len(mse_dist):
-        stats_dct['mse'] = sqrt(sum(mse_dist)/float(count_slice))
+        stats_dct['mse'] = sqrt(sum(mse_dist)/float(len(mse_dist)))
         stats_dct['maxmove'] = sqrt(max(mse_dist))
         stats_dct['zcoverage'] = float(slice_coverage*100.0)/count_slice
+    else:
+        stats_dct['mse'] = None
+        stats_dct['maxmove'] = None
+        stats_dct['zcoverage'] = None
 
     return stats_dct
 
@@ -475,21 +148,24 @@ def _compute_stats_file(fname_ctr_pred, fname_ctr_true, fname_seg_true, folder_o
 
     create_folders_local([folder_out])
 
+    print stats_file_dct
+
     pickle.dump(stats_file_dct, open(fname_out, "wb"))
 
 
-def _compute_stats_folder(subj_name_lst, cc, llambda, folder_out, fname_out):
+def _compute_stats_folder(subj_name_lst, cc, folder_out, fname_out):
 
     stats_folder_dct = {}
 
     mse_lst, maxmove_lst, zcoverage_lst = [], [], []
     for subj in subj_name_lst:
-        with open(folder_out + 'res_' + cc + '_' + llambda + '_' + subj + '.pkl') as outfile:    
+        with open(folder_out + 'res_' + cc + '_' + subj + '.pkl') as outfile:    
             subj_metrics = pickle.load(outfile)
             outfile.close()
-        mse_lst.append(subj_metrics['mse'])
-        maxmove_lst.append(subj_metrics['maxmove'])
-        zcoverage_lst.append(subj_metrics['zcoverage'])
+        if subj_metrics['mse'] is not None:
+            mse_lst.append(subj_metrics['mse'])
+            maxmove_lst.append(subj_metrics['maxmove'])
+            zcoverage_lst.append(subj_metrics['zcoverage'])
 
     stats_folder_dct['avg_mse'] = round(np.mean(mse_lst),2)
     stats_folder_dct['avg_maxmove'] = round(np.mean(maxmove_lst),2)
@@ -501,19 +177,19 @@ def _compute_stats_folder(subj_name_lst, cc, llambda, folder_out, fname_out):
 
 
 
-def compute_dataset_stats(path_local, cc, llambda):
+def compute_dataset_stats(path_local, cc):
 
-    path_local_nii = path_local + 'cnn_output_nii_' + cc + '_' + llambda + '/'
-    path_local_res_pkl = path_local + 'cnn_pkl' + '/'
+    path_local_nii = path_local + 'propseg_nii_' + cc + '/'
+    path_local_res_pkl = path_local + 'propseg_pkl_' + cc + '/'
     path_local_gold = path_local + 'gold_' + cc + '/'
     path_local_seg = path_local + 'input_nii_' + cc + '/'
-    fname_pkl_out = path_local_res_pkl + 'res_' + cc + '_' + llambda + '_'
+    fname_pkl_out = path_local_res_pkl + 'res_' + cc + '_'
 
     subj_name_lst = []
     for ff in os.listdir(path_local_nii):
         print ff
-        if ff.endswith('_centerline_pred.nii.gz'):
-            subj_name_cur = ff.split('_pred_centerline_pred.nii.gz')[0]
+        if ff.endswith('_pred.nii.gz'):
+            subj_name_cur = ff.split('_pred.nii.gz')[0]
             subj_name_lst.append(subj_name_cur)
             fname_subpkl_out = fname_pkl_out + subj_name_cur + '.pkl'
             
@@ -527,22 +203,74 @@ def compute_dataset_stats(path_local, cc, llambda):
 
     fname_pkl_out_all = fname_pkl_out + 'all.pkl'
     if not os.path.isfile(fname_pkl_out_all):
-        _compute_stats_folder(subj_name_lst, cc, llambda, path_local_res_pkl, fname_pkl_out_all)
+        _compute_stats_folder(subj_name_lst, cc, path_local_res_pkl, fname_pkl_out_all)
 
 def display_results(path_local, cc):
 
-    path_local_res_pkl = path_local + 'cnn_pkl' + '/'
+    path_local_res_pkl = path_local + 'propseg_pkl_' + cc + '/'
 
     for f in os.listdir(path_local_res_pkl):
         if f.endswith('_all.pkl') and f.startswith('res_'+cc):
             with open(path_local_res_pkl + f) as outfile:    
-                lambda_metrics = pickle.load(outfile)
+                metrics = pickle.load(outfile)
                 outfile.close()
             print '\n' + f
-            print lambda_metrics
+            print metrics
 
 
 # ******************************************************************************************
+
+
+def plot_comparison_nb_train(path_local, cc):
+
+    path_best_train_lst = [pp for pp in os.listdir(path_local) if pp.startswith('plot_best_train_' + cc + '_')]
+    mm_lst = list(np.unique([pp.split('_')[-1] for pp in path_best_train_lst]))
+    nb_train_lst = [pp.split('_')[-2] for pp in path_best_train_lst]
+    path_best_train_lst = [path_local + pp + '/' + f for pp in path_best_train_lst for f in os.listdir(path_local + pp) if f.endswith('.pkl')]
+
+    path_best_train_dct = {}
+    for pp in path_best_train_lst:
+        for mm in mm_lst:
+            if mm in pp.split('/')[-2]:
+                if not mm in path_best_train_dct:
+                    path_best_train_dct[mm]={}
+                for nn in nb_train_lst:
+                    if nn in pp.split('/')[-2]:
+                        path_best_train_dct[mm][nn] = pp
+
+
+    res_best_train_dct = {}
+    for mm in mm_lst:
+        fname_test_lst = [pickle.load(open(path_best_train_dct[mm][f]))['fname_test'] for f in path_best_train_dct[mm]]
+        fname_test_lst = list(set(fname_test_lst[0]).intersection(*fname_test_lst[1:]))
+
+
+        res_best_train_dct[mm] = {}
+        for f in path_best_train_dct[mm]:
+            with open(path_best_train_dct[mm][f]) as outfile:    
+                res = pickle.load(outfile)
+                outfile.close()
+
+            res_best_train_dct[mm][f] = []
+            for test_smple in fname_test_lst:
+                res_best_train_dct[mm][f].append(res['all'][res['fname_test'].index(test_smple)])
+
+    nb_col_plot = len(path_best_train_dct)
+    nb_row_plot = len(path_best_train_dct[list(path_best_train_dct.keys())[0]])
+
+    sns.set(style="whitegrid", palette="pastel", color_codes=True)
+    fig, axes = plt.subplots(nb_row_plot, nb_col_plot, sharey='col', figsize=(10*nb_row_plot, 10*nb_col_plot))
+    cmpt = 1
+    print mm_lst
+    for mm in mm_lst:
+        for f in res_best_train_dct[mm]:
+            a = plt.subplot(nb_row_plot, nb_col_plot,cmpt)
+            sns.violinplot(data=res_best_train_dct[mm][f], inner="quartile", cut=0, scale="count", sharey=True)
+            sns.swarmplot(data=res_best_train_dct[mm][f], palette='deep', size=4)
+            cmpt += 1
+    plt.show()
+
+
 
 
 # ****************************      USER CASE      *****************************************
@@ -580,20 +308,21 @@ if __name__ == '__main__':
     # Format of parser arguments
     contrast_of_interest = str(parse_arg.contrast) 
 
+
+    # prepare_dataset_cnn(path_local_sdika, contrast_of_interest, '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/datasets.pbz2')
+
+
     if not step:
-        prepare_prediction_propseg(path_local_sdika, contrast_of_interest)
+        prediction_propseg(path_local_sdika, contrast_of_interest)
 
     elif step == 1:
-        send_dataCNN2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
-
-    elif step == 2:
-        pull_CNNimg_convert_nii_remove_img(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
-
-    elif step == 3:
-        compute_dataset_stats(path_local_sdika, contrast_of_interest, llambda)
+        compute_dataset_stats(path_local_sdika, contrast_of_interest)
 
     elif step == 4:
         display_results(path_local_sdika, contrast_of_interest)
+
+    elif step == 5:
+        plot_comparison_nb_train(path_local_sdika, contrast_of_interest)
 
     print TODO_STRING
 
