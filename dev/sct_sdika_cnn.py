@@ -554,8 +554,9 @@ def send_dataCNN2ferguson(path_local, path_ferguson, cc, llambda):
     path_pickle_ferguson = path_local + 'ferguson_cnn_config.pkl'
     pickle.dump(pickle_ferguson, open(path_pickle_ferguson, "wb"))
 
+    print 'scp -r ' + path_local + 'cnn_img_' + cc + '/' + ' ferguson:' + path_ferguson
     os.system('scp -r ' + path_local + 'cnn_img_' + cc + '/' + ' ferguson:' + path_ferguson)
-    os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
+    # os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
 
 
 def pull_CNNimg_convert_nii_remove_img(path_local, path_ferguson, cc, llambda):
@@ -690,18 +691,6 @@ def compute_dataset_stats(path_local, cc, llambda):
     if not os.path.isfile(fname_pkl_out_all):
         _compute_stats_folder(subj_name_lst, cc, llambda, path_local_res_pkl, fname_pkl_out_all)
 
-def display_results(path_local, cc):
-
-    path_local_res_pkl = path_local + 'cnn_pkl_' + cc + '_' + llambda + '/'
-
-    for f in os.listdir(path_local_res_pkl):
-        if f.endswith('_all.pkl') and f.startswith('res_'+cc):
-            with open(path_local_res_pkl + f) as outfile:    
-                lambda_metrics = pickle.load(outfile)
-                outfile.close()
-            print '\n' + f
-            print lambda_metrics
-
 
 # ******************************************************************************************
 
@@ -776,17 +765,14 @@ if __name__ == '__main__':
         prepare_prediction_cnn(path_local_sdika, model, contrast_of_interest, grid_search_dct, threshold)
         # FAIRE UN PULL DES RESULTATS FERGUSSON PUIS PUSH NEW RESULTS
 
-    # elif step == 1:
-    #     send_dataCNN2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
+    elif step == 1:
+        send_dataCNN2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
 
-    # elif step == 2:
-    #     pull_CNNimg_convert_nii_remove_img(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
+    elif step == 2:
+        pull_CNNimg_convert_nii_remove_img(path_local_sdika, path_ferguson, contrast_of_interest, llambda)
 
-    # elif step == 3:
-    #     compute_dataset_stats(path_local_sdika, contrast_of_interest, llambda)
-
-    # elif step == 4:
-    #     display_results(path_local_sdika, contrast_of_interest)
+    elif step == 3:
+        compute_dataset_stats(path_local_sdika, contrast_of_interest, llambda)
 
     print TODO_STRING
 

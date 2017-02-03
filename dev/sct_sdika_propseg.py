@@ -227,6 +227,7 @@ def plot_comparison_nb_train(path_local, cc):
     mm_lst = list(np.unique([pp.split('_')[-1] for pp in path_best_train_lst]))
     nb_train_lst = [pp.split('_')[-2] for pp in path_best_train_lst]
     path_best_train_lst = [path_local + pp + '/' + f for pp in path_best_train_lst for f in os.listdir(path_local + pp) if f.endswith('.pkl')]
+    create_folders_local([path_local+'plot_nb_train_img_comparison/'])
 
     path_best_train_dct = {}
     for pp in path_best_train_lst:
@@ -258,18 +259,24 @@ def plot_comparison_nb_train(path_local, cc):
     nb_row_plot = len(path_best_train_dct)
     nb_col_plot = len(path_best_train_dct[list(path_best_train_dct.keys())[0]])
 
+    nb_img_train_lst = [int(ll) for ll in list(path_best_train_dct[list(path_best_train_dct.keys())[0]].keys())]
+    nb_img_train_lst.sort()
+    nb_img_train_lst = [str(ll) for ll in nb_img_train_lst]
+
     sns.set(style="whitegrid", palette="pastel", color_codes=True)
     fig, axes = plt.subplots(nb_row_plot, nb_col_plot, sharey='col', figsize=(8*nb_col_plot, 8*nb_row_plot))
     cmpt = 1
-    color_lst = sns.color_palette("hls", max([int(ll) for ll in list(path_best_train_dct[list(path_best_train_dct.keys())[0]].keys())]))
+    # color_lst = sns.color_palette("husl", n_colors=max([int(ii) for ii in nb_img_train_lst]))
+    # random.shuffle(color_lst, lambda:0.25)
+    color_lst = sns.light_palette("orange", n_colors=max([int(ii) for ii in nb_img_train_lst]))
     fig.subplots_adjust(left=0.05, bottom=0.05)
     for mm in mm_lst:
-        for f in res_best_train_dct[mm]:
+        for f in nb_img_train_lst:
             a = plt.subplot(nb_row_plot, nb_col_plot,cmpt)
             sns.violinplot(data=res_best_train_dct[mm][f], inner="quartile", cut=0, scale="count", sharey=True, color=color_lst[int(f)-1])
             sns.swarmplot(data=res_best_train_dct[mm][f], palette='deep', size=4)
-            a.set_ylabel(mm)
-            a.set_xlabel('# of training image: ' + f)
+            a.set_ylabel(mm, fontsize=13)
+            a.set_xlabel('# of training image: ' + f, fontsize=13)
 
             stg = '# of testing subj: ' + str(len(res_best_train_dct[mm][f]))
             stg += '\nMean: ' + str(round(np.mean(res_best_train_dct[mm][f]),2))
@@ -293,10 +300,13 @@ def plot_comparison_nb_train(path_local, cc):
 
             a.set_ylim([y_lim_min,y_lim_max])
             
-            a.text(0.3, y_stg_loc, stg, fontsize=15)
+            a.text(0.2, y_stg_loc, stg, fontsize=13)
 
             cmpt += 1
     plt.show()
+    fig.tight_layout()
+    fig.savefig(path_local+'plot_nb_train_img_comparison/plot_comparison_' + cc + '.png')
+    plt.close()
 
 
 

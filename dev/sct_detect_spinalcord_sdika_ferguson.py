@@ -12,13 +12,20 @@ with open(path_config) as outfile:
 	outfile.close()
 contrast = config['contrast']
 nb_image_train = config['nb_image_train']
+valid_subj = config['valid_subj']
 path_ferguson_input_img = path_ferguson_work + 'input_img_' + contrast + '/'
 path_ferguson_train = path_ferguson_work + 'input_train_' + contrast + '_'+ str(nb_image_train) + '/'
 path_ferguson_res_img = path_ferguson_work + 'output_img_' + contrast + '_'+ str(nb_image_train) + '/'
 cmd_line_test = './spine_detect -ctype=dpdt -lambda=1 '
 
+# subj_id = []
+# for f in os.listdir(path_ferguson_input_img):
+# 	if f.endswith('.img') and not '_seg' in f:
+# 		subj_id.append(f.split('.')[0])
+
+
 subj_id = []
-for f in os.listdir(path_ferguson_input_img):
+for f in valid_subj:
 	if f.endswith('.img') and not '_seg' in f:
 		subj_id.append(f.split('.')[0])
 
@@ -42,12 +49,15 @@ if len(path_sub_train):
 
 		id_train_subj = [line.rstrip('\n').split('/')[-1] for line in open(path_txt)]
 
-		path_res_cur = path_ferguson_res_img + '__'.join(id_train_subj) + '/'
+		# path_res_cur = path_ferguson_res_img + '__'.join(id_train_subj) + '/'
+		path_res_cur = path_ferguson_res_img +tt.split('.')[0]+ '/'
 
 		try:
-			os.system('mkdir ' + path_res_cur)
-		except OSError:
-			os.system('mkdir ' + path_ferguson_res_img + str(zz).zfill(3) + '/')
+			os.makedirs(path_res_cur)
+		except Exception, e:
+			print e
+			path_res_cur = path_ferguson_res_img + str(zz).zfill(3) + '/'
+			os.makedirs(path_res_cur)
 
 
 		for ss_test in subj_id:
