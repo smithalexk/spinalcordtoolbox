@@ -34,11 +34,12 @@ def check_and_correct_segmentation(fname_segmentation, fname_centerline, thresho
 
     Returns: None
     """
-
+    sct.printv('\nCheck consistency of segmentation...', verbose)
     # creating a temporary folder in which all temporary files will be placed and deleted afterwards
     path_tmp = sct.tmp_create(verbose=verbose)
-    shutil.copy(fname_segmentation, path_tmp + 'tmp.segmentation.nii.gz')
-    shutil.copy(fname_centerline, path_tmp + 'tmp.centerline.nii.gz')
+    from sct_convert import convert
+    convert(fname_segmentation, path_tmp + 'tmp.segmentation.nii.gz', squeeze_data=False, verbose=0)
+    convert(fname_centerline, path_tmp + 'tmp.centerline.nii.gz', squeeze_data=False, verbose=0)
 
     # go to tmp folder
     os.chdir(path_tmp)
@@ -297,17 +298,19 @@ if __name__ == "__main__":
     parser = get_parser()
     arguments = parser.parse(sys.argv[1:])
 
-    fname_data = arguments["-i"]
+    fname_data = os.path.abspath(arguments["-i"])
     contrast_type = arguments["-c"]
 
     # Building the command
-    cmd = "isct_propseg" + " -i " + fname_data + " -t " + contrast_type
+    cmd = 'isct_propseg -i "%s" -t %s' % (fname_data, contrast_type)
 
     if "-ofolder" in arguments:
         folder_output = sct.slash_at_the_end(arguments["-ofolder"], slash=1)
     else:
         folder_output = './'
-    cmd += " -o " + folder_output
+    cmd += ' -o "%s"' % folder_output
+    if not os.path.isdir(folder_output) and os.path.exists(folder_output):
+        sct.printv("ERROR output directory %s is not a valid directory" % folder_output, 1, 'error')
     if not os.path.exists(folder_output):
         os.makedirs(folder_output)
 
@@ -399,7 +402,8 @@ if __name__ == "__main__":
         image_input_orientation = orientation(image_input, get=True, verbose=False)
         reoriented_image_filename = 'tmp.' + sct.add_suffix(file_data + ext_data, "_SAL")
         path_tmp_viewer = sct.tmp_create(verbose=verbose)
-        sct.run('sct_image -i ' + fname_data + ' -o ' + path_tmp_viewer + reoriented_image_filename + ' -setorient SAL -v 0', verbose=False)
+        cmd = 'sct_image -i "%s" -o "%s" -setorient SAL -v 0' % (fname_data, os.path.join(path_tmp_viewer, reoriented_image_filename))
+        sct.run(cmd, verbose=False)
 
         from sct_viewer import ClickViewer
         image_input_reoriented = Image(path_tmp_viewer + reoriented_image_filename)
@@ -431,21 +435,22 @@ if __name__ == "__main__":
             elif use_viewer == "mask":
                 cmd += " -init-mask " + folder_output + mask_reoriented_filename
         else:
-            sct.printv('\nERROR: the viewer has been closed before entering all manual points. Please try again.', verbose, type='error')
+            sct.printv('\nERROR: the viewer has been closed before entering all manual points. Please try again.', 1, type='error')
 
     cmd += ' -centerline-binary'
-    sct.run(cmd, verbose)
+    status, output = sct.run(cmd, verbose, error_exit='verbose')
 
-    # extracting output filename
+    # check status is not 0
+    if not status == 0:
+        sct.printv('\nERROR: Automatic cord detection failed. Please initialize using -init-centerline or -init-mask (see help).', 1, type='error')
+
+    # build output filename
     file_seg = file_data + "_seg" + ext_data
-    if folder_output == "./":
-        fname_seg = file_seg
-    else:
-        fname_seg = folder_output + file_seg
+    fname_seg = os.path.normpath(folder_output + file_seg)
 
     # check consistency of segmentation
     fname_centerline = folder_output + file_data + '_centerline' + ext_data
-    check_and_correct_segmentation(fname_seg, fname_centerline, threshold_distance=3.0, remove_temp_files=remove_temp_files)
+    check_and_correct_segmentation(fname_seg, fname_centerline, threshold_distance=3.0, remove_temp_files=remove_temp_files, verbose=verbose)
 
     # copy header from input to segmentation to make sure qform is the same
     from sct_image import copy_header
