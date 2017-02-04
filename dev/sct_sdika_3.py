@@ -629,13 +629,6 @@ def compute_dataset_stats(path_local, cc, nb_img):
 
 # ****************************      STEP 4 FUNCTIONS      *******************************
 
-def find_id_extr_df(df, mm):
-
-  if 'zcoverage' in mm:
-    return [df[mm].max(), df[df[mm] == df[mm].max()]['id'].values.tolist()[0], df[mm].min(), df[df[mm] == df[mm].min()]['id'].values.tolist()[0]]
-  else:
-    return [df[mm].min(), df[df[mm] == df[mm].min()]['id'].values.tolist()[0], df[mm].max(), df[df[mm] == df[mm].max()]['id'].values.tolist()[0]]
-
 def panda_trainer(path_local, cc):
 
     path_folder_pkl = path_local + 'output_pkl_' + cc + '/'
@@ -646,172 +639,38 @@ def panda_trainer(path_local, cc):
       if os.path.isdir(path_nb_cur):
         fname_out_cur = path_folder_pkl + fold + '.pkl'
 
-        # if not os.path.isfile(fname_out_cur):
-        metric_fold_dct = {'id': [], 'maxmove_moy': [], 'mse_moy': [], 'zcoverage_moy': [],
-                            'maxmove_med': [], 'mse_med': [], 'zcoverage_med': []}
-        
-        for tr_subj in os.listdir(path_nb_cur):
-          metric_fold_dct['id'].append(tr_subj)
-          path_cur = path_nb_cur + tr_subj + '/'
+        if not os.path.isfile(fname_out_cur):
+          metric_fold_dct = {'train_id': [], 'maxmove': [], 'mse': [], 'zcoverage': []}
           
-          metric_cur_dct = {'maxmove': [], 'mse': [], 'zcoverage': []}
-          for file in os.listdir(path_cur):
-            if file.endswith('.pkl'):
-              with open(path_cur+file) as outfile:    
-                metrics = pickle.load(outfile)
-                outfile.close()
-              
-              for mm in metrics:
-                if mm in metric_cur_dct:
-                  metric_cur_dct[mm].append(metrics[mm])
+          for tr_subj in os.listdir(path_nb_cur):
+            metric_fold_dct['train_id'].append(tr_subj)
+            path_cur = path_nb_cur + tr_subj + '/'
+            
+            metric_cur_dct = {'maxmove': [], 'mse': [], 'zcoverage': []}
+            for file in os.listdir(path_cur):
+              if file.endswith('.pkl'):
+                with open(path_cur+file) as outfile:    
+                  metrics = pickle.load(outfile)
+                  outfile.close()
+                
+                for mm in metrics:
+                  if mm in metric_cur_dct:
+                    metric_cur_dct[mm].append(metrics[mm])
 
-          metric_fold_dct['maxmove_med'].append(np.median(metric_cur_dct['maxmove']))
-          metric_fold_dct['mse_med'].append(np.median(metric_cur_dct['mse']))
-          metric_fold_dct['zcoverage_med'].append(np.median(metric_cur_dct['zcoverage']))
+            metric_fold_dct['maxmove'].append(np.median(metric_cur_dct['maxmove']))
+            metric_fold_dct['mse'].append(np.median(metric_cur_dct['mse']))
+            metric_fold_dct['zcoverage'].append(np.median(metric_cur_dct['zcoverage']))
 
-          metric_fold_dct['maxmove_moy'].append(np.mean(metric_cur_dct['maxmove']))
-          metric_fold_dct['mse_moy'].append(np.mean(metric_cur_dct['mse']))
-          metric_fold_dct['zcoverage_moy'].append(np.mean(metric_cur_dct['zcoverage']))
+          metric_fold_pd = pd.DataFrame.from_dict(metric_fold_dct)
+          metric_fold_pd.to_pickle(fname_out_cur)
+        else:
+          with open(fname_out_cur) as outfile:    
+            metric_fold_pd = pickle.load(outfile)
+            outfile.close()
 
-        metric_fold_pd = pd.DataFrame.from_dict(metric_fold_dct)
-        metric_fold_pd.to_pickle(fname_out_cur)
-
-
-        print '\nBest Trainer:'
-        for mm in metric_fold_dct:
-          if mm != 'id':
-            find_id_extr_df(metric_fold_pd, mm)
-            print '... ' + mm + ' : ' + find_id_extr_df(metric_fold_pd, mm)[1] + ' ' + str(find_id_extr_df(metric_fold_pd, mm)[0])
-        
+        print metric_fold_pd
 
 
-        # else:
-        #   with open(fname_out_cur) as outfile:    
-        #     metric_fold_pd = pickle.load(outfile)
-        #     outfile.close()
-
-        # print metric_fold_pd
-
-def create_extr_pd(path_pkl, cc, mm):
-
-  path_out = '/'.join(path_pkl.split('/')[:-2]) + '/best_' + mm + '.pkl'
-
-  with open('/'.join(path_pkl.split('/')[:-4]) + '/test_valid_' + cc + '.pkl') as outfile:    
-    all_data_pd = pickle.load(outfile)
-    outfile.close()
-
-  print all_data_pd['']
-
-
-def plot_trainers_best_worst(path_local, cc, nb_img, mm):
-
-  path_folder_pkl = path_local + 'output_pkl_' + cc + '/' + str(nb_img) + '.pkl'
-  with open(path_folder_pkl) as outfile:    
-    data_pd = pickle.load(outfile)
-    outfile.close()
-
-  if len(data_pd[data_pd[mm+'_med']==find_id_extr_df(data_pd, mm+'_med')[0]]['id'].values.tolist())>1:
-    mm_avg = mm + '_moy'
-  else:
-    mm_avg = mm + '_med'
-
-  fold_best, fold_worst = find_id_extr_df(data_pd, mm_avg)[1], find_id_extr_df(data_pd, mm_avg)[3]
-
-  path_best = path_folder_pkl.split('.pkl')[0] + '/' + fold_best + '/'
-  path_worst = path_folder_pkl.split('.pkl')[0] + '/' + fold_worst + '/'
-
-  create_extr_pd(path_best, cc, mm)
-
-
-
-
-  # path_pkl_all_metric = path_local + 'plot_' + cc + '_' + str(nb_img) + '_' + 'all/'
-  # path_pkl_all_metric = [path_pkl_all_metric + p for p in os.listdir(path_pkl_all_metric) if p.endswith('.pkl')][0]
-  # with open(path_pkl_all_metric) as outfile:    
-  #   metrics = pickle.load(outfile)
-  #   outfile.close()
-
-  # all_data = {'all': metrics['avg_' + mm], 'patient' : metrics['avg_' + mm], 'HC': metrics['avg_' + mm]}
-
-  # path_pkl_best_metric = path_local + 'plot_best_train_' + cc + '_' + str(nb_img) + '_' + mm + '/'
-  # path_pkl_best_metric = [path_pkl_best_metric + p for p in os.listdir(path_pkl_best_metric) if p.endswith('.pkl')][0]
-  # with open(path_pkl_best_metric) as outfile:    
-  #   metrics = pickle.load(outfile)
-  #   outfile.close()
-
-  # best_data = {'all': metrics['all'], 'patient' : metrics['Patient'], 'HC': metrics['HC']}
-
-  # path_pkl_worst_metric = path_local + 'plot_worst_train_' + cc + '_' + str(nb_img) + '_' + mm + '/'
-  # path_pkl_worst_metric = [path_pkl_worst_metric + p for p in os.listdir(path_pkl_worst_metric) if p.endswith('.pkl')][0]
-  # with open(path_pkl_worst_metric) as outfile:    
-  #   metrics = pickle.load(outfile)
-  #   outfile.close()
-
-  # worst_data = {'all': metrics['all'], 'patient' : metrics['Patient'], 'HC': metrics['HC']}
-
-
-
-
-
-
-
-
-
-  # sns.set(style="whitegrid", palette="pastel", color_codes=True)
-  # fig, axes = plt.subplots(1, 3, sharey='col', figsize=(24, 8))
-  # cmpt = 1
-  # color_lst = ['lightblue', 'lightgreen', 'lightsalmon']
-  # x_label_lst = ['Averaged by trainer', 'Best Trainer', 'Worst Trainer']
-  # fig.subplots_adjust(left=0.05, bottom=0.05)
-  # for data in [all_data, best_data, worst_data]:
-  #   a = plt.subplot(1, 3,cmpt)
-  #   sns.violinplot(data=data['all'], inner="quartile", cut=0, scale="count", sharey=True, color=color_lst[cmpt-1])
-  #   if cmpt == 1:
-  #     sns.swarmplot(data=data['all'], palette='deep', size=4)
-  #   else:
-  #     for group, colorr in zip(['patient', 'HC'], ['crimson', 'royalblue']):
-  #       sns.swarmplot(data=data[group], size=4, color=colorr)
-  #   a.set_ylabel(mm, fontsize=13)
-  #   a.set_xlabel(x_label_lst[cmpt-1], fontsize=13)
-
-  #   stg = 'Median: ' + str(round(np.median(data['all']),2))
-  #   stg += '\nStd: ' + str(round(np.std(data['all']),2))
-
-  #   if mm != 'zcoverage':
-  #       stg += '\nMax: ' + str(round(np.max(data['all']),2))
-
-  #       if cc == 't2':
-  #         y_lim_min, y_lim_max = 0.01, 30
-  #       elif cc == 't1':
-  #         y_lim_min, y_lim_max = 0.01, 30
-  #       y_stg_loc = y_lim_max-10
-
-  #   else:
-  #       stg += '\nMin: ' + str(round(np.min(data['all']),2))
-
-  #       if cc == 't2':
-  #         y_lim_min, y_lim_max = 50, 101
-  #         if nb_img == 10:
-  #           y_lim_min, y_lim_max = 67, 101
-  #         y_stg_loc = y_lim_min+20
-  #       elif cc == 't1':
-  #         y_lim_min, y_lim_max = 55, 101
-  #         if nb_img == 5:
-  #           y_lim_min, y_lim_max = 80, 101
-  #         y_stg_loc = y_lim_min+10
-
-  #   a.set_ylim([y_lim_min,y_lim_max])
-    
-  #   a.text(0.2, y_stg_loc, stg, fontsize=13)
-
-  #   cmpt += 1
-
-  # # # plt.show()
-  # # fig.tight_layout()
-  # # path_save_fig = path_local+'plot_best_worst/'
-  # # create_folders_local([path_save_fig])
-  # # fig.savefig(path_save_fig+'plot_' + cc + '_' + str(nb_img) + '_' + mm + '.png')
-  # # plt.close()
 
 # ******************************************************************************************
 
@@ -1558,7 +1417,87 @@ def plot_comparison_nb_train(path_local, cc):
 
 # ****************************      STEP 9 FUNCTIONS      *******************************
 
+def plot_trainers_best_worst(path_local, cc, nb_img, mm):
 
+  path_pkl_all_metric = path_local + 'plot_' + cc + '_' + str(nb_img) + '_' + 'all/'
+  path_pkl_all_metric = [path_pkl_all_metric + p for p in os.listdir(path_pkl_all_metric) if p.endswith('.pkl')][0]
+  with open(path_pkl_all_metric) as outfile:    
+    metrics = pickle.load(outfile)
+    outfile.close()
+
+  all_data = {'all': metrics['avg_' + mm], 'patient' : metrics['avg_' + mm], 'HC': metrics['avg_' + mm]}
+
+  path_pkl_best_metric = path_local + 'plot_best_train_' + cc + '_' + str(nb_img) + '_' + mm + '/'
+  path_pkl_best_metric = [path_pkl_best_metric + p for p in os.listdir(path_pkl_best_metric) if p.endswith('.pkl')][0]
+  with open(path_pkl_best_metric) as outfile:    
+    metrics = pickle.load(outfile)
+    outfile.close()
+
+  best_data = {'all': metrics['all'], 'patient' : metrics['Patient'], 'HC': metrics['HC']}
+
+  path_pkl_worst_metric = path_local + 'plot_worst_train_' + cc + '_' + str(nb_img) + '_' + mm + '/'
+  path_pkl_worst_metric = [path_pkl_worst_metric + p for p in os.listdir(path_pkl_worst_metric) if p.endswith('.pkl')][0]
+  with open(path_pkl_worst_metric) as outfile:    
+    metrics = pickle.load(outfile)
+    outfile.close()
+
+  worst_data = {'all': metrics['all'], 'patient' : metrics['Patient'], 'HC': metrics['HC']}
+
+  sns.set(style="whitegrid", palette="pastel", color_codes=True)
+  fig, axes = plt.subplots(1, 3, sharey='col', figsize=(24, 8))
+  cmpt = 1
+  color_lst = ['lightblue', 'lightgreen', 'lightsalmon']
+  x_label_lst = ['Averaged by trainer', 'Best Trainer', 'Worst Trainer']
+  fig.subplots_adjust(left=0.05, bottom=0.05)
+  for data in [all_data, best_data, worst_data]:
+    a = plt.subplot(1, 3,cmpt)
+    sns.violinplot(data=data['all'], inner="quartile", cut=0, scale="count", sharey=True, color=color_lst[cmpt-1])
+    if cmpt == 1:
+      sns.swarmplot(data=data['all'], palette='deep', size=4)
+    else:
+      for group, colorr in zip(['patient', 'HC'], ['crimson', 'royalblue']):
+        sns.swarmplot(data=data[group], size=4, color=colorr)
+    a.set_ylabel(mm, fontsize=13)
+    a.set_xlabel(x_label_lst[cmpt-1], fontsize=13)
+
+    stg = 'Median: ' + str(round(np.median(data['all']),2))
+    stg += '\nStd: ' + str(round(np.std(data['all']),2))
+
+    if mm != 'zcoverage':
+        stg += '\nMax: ' + str(round(np.max(data['all']),2))
+
+        if cc == 't2':
+          y_lim_min, y_lim_max = 0.01, 30
+        elif cc == 't1':
+          y_lim_min, y_lim_max = 0.01, 30
+        y_stg_loc = y_lim_max-10
+
+    else:
+        stg += '\nMin: ' + str(round(np.min(data['all']),2))
+
+        if cc == 't2':
+          y_lim_min, y_lim_max = 50, 101
+          if nb_img == 10:
+            y_lim_min, y_lim_max = 67, 101
+          y_stg_loc = y_lim_min+20
+        elif cc == 't1':
+          y_lim_min, y_lim_max = 55, 101
+          if nb_img == 5:
+            y_lim_min, y_lim_max = 80, 101
+          y_stg_loc = y_lim_min+10
+
+    a.set_ylim([y_lim_min,y_lim_max])
+    
+    a.text(0.2, y_stg_loc, stg, fontsize=13)
+
+    cmpt += 1
+
+  # plt.show()
+  fig.tight_layout()
+  path_save_fig = path_local+'plot_best_worst/'
+  create_folders_local([path_save_fig])
+  fig.savefig(path_save_fig+'plot_' + cc + '_' + str(nb_img) + '_' + mm + '.png')
+  plt.close()
 
 
 # ******************************************************************************************
@@ -1648,11 +1587,11 @@ if __name__ == '__main__':
             elif step == 3:
                 # Compute metrics / Evaluate performance of Sdika algorithm
                 compute_dataset_stats(path_local_sdika, contrast_of_interest, nb_train_img)
+                # panda_trainer(path_local, cc)
 
             elif step == 4:
-              panda_trainer(path_local_sdika, contrast_of_interest)
-              plot_trainers_best_worst(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage')
-                # plot_trainers_best_worst(path_local_sdika, contrast_of_interest, nb_train_img, 'maxmove')
+                # Plot dataset results
+                # run_plot_violin(path_local_sdika, contrast_of_interest, nb_train_img, 'plot_'+contrast_of_interest+'_'+str(nb_train_img)+'_all')
 
             elif step == 5:
                 # Partition dataset into ISO, AX and SAG
@@ -1686,7 +1625,9 @@ if __name__ == '__main__':
 
             elif step == 8:
                 plot_comparison_nb_train(path_local_sdika, contrast_of_interest)
-
+            elif step == 9:
+                plot_trainers_best_worst(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage')
+                plot_trainers_best_worst(path_local_sdika, contrast_of_interest, nb_train_img, 'maxmove')
 
             else:
                 print USAGE_STRING
