@@ -475,8 +475,8 @@ def send_data2ferguson(path_local, path_ferguson, cc, nb_img):
     pickle.dump(pickle_ferguson, output_file)
     output_file.close()
 
-    os.system('scp -r ' + path_local + 'input_img_' + contrast_of_interest + '/' + ' ferguson:' + path_ferguson)
-    os.system('scp -r ' + path_local_train_cur + ' ferguson:' + path_ferguson)
+    # os.system('scp -r ' + path_local + 'input_img_' + contrast_of_interest + '/' + ' ferguson:' + path_ferguson)
+    # os.system('scp -r ' + path_local_train_cur + ' ferguson:' + path_ferguson)
     os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
 
 
@@ -1593,14 +1593,14 @@ if __name__ == '__main__':
                 # Plot dataset results
                 # run_plot_violin(path_local_sdika, contrast_of_interest, nb_train_img, 'plot_'+contrast_of_interest+'_'+str(nb_train_img)+'_all')
 
-            elif step == 5:
-                # Partition dataset into ISO, AX and SAG
-                resol_dct = partition_resol(path_local_sdika, contrast_of_interest)
+            # elif step == 5:
+            #     # Partition dataset into ISO, AX and SAG
+            #     resol_dct = partition_resol(path_local_sdika, contrast_of_interest)
 
-                # Partition dataset into HC // DCM // MS 
-                with open(path_local_sdika + 'patho_dct_' + contrast_of_interest + '.pkl') as outfile:    
-                    patho_dct = pickle.load(outfile)
-                    outfile.close()
+            #     # Partition dataset into HC // DCM // MS 
+            #     with open(path_local_sdika + 'patho_dct_' + contrast_of_interest + '.pkl') as outfile:    
+            #         patho_dct = pickle.load(outfile)
+            #         outfile.close()
 
                 # compute_best_trainer(path_local_sdika, contrast_of_interest, nb_train_img, ['mse', 'maxmove', 'zcoverage'],
                 #                         {'HC': patho_dct['HC'], 'MS': patho_dct['MS'], 'CSM': patho_dct['CSM']})
