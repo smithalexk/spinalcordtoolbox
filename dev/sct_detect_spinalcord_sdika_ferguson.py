@@ -62,7 +62,12 @@ if len(path_sub_train):
 
 		for ss_test in subj_id:
 			if not ss_test in id_train_subj:
+				t_test_init = time.time()
 				os.system(cmd_line_test + path_sub_train + tt.split('.')[0] + ' ' + path_ferguson_input_img + ss_test + ' ' + path_res_cur + ss_test)
+				if nb_image_train == 666:
+					with open(path_res_cur + ss_test + '.txt', 'w') as text_file:
+						text_file.write(str(time.time() - t_test_init))
+						text_file.close()
 				if os.path.isfile(path_res_cur + ss_test + '_ctr.txt'):
 					os.remove(path_res_cur + ss_test + '_ctr.txt')
 				if os.path.isfile(path_res_cur + ss_test + '_svm.hdr'):

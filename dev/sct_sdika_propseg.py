@@ -49,7 +49,7 @@ def prepare_dataset_cnn(path_local, cc, path_train_cnn):
     fname_training_img_sdika = [f for ff in fname_training_img for f in data_lst if ff in f]
     fname_testing_img = list(set(data_lst)-set(fname_training_img_sdika))
 
-    output_file = open(path_local + 'dataset_lst_cnn_' + cc + '.pkl', 'wb')
+    output_file = open(path_local + 'cnn_dataset_lst_' + cc + '.pkl', 'wb')
     pickle.dump(fname_testing_img, output_file)
     output_file.close()
 
@@ -309,6 +309,158 @@ def plot_comparison_nb_train(path_local, cc):
     plt.close()
 
 
+def panda_seg(path_local, cc, nb_img, mm):
+
+    fname_out_pd = path_local + 'train_test_' + cc + '.pkl'
+
+    fname_pd_trainer = path_local + 'output_pkl_' + cc + '/' + str(nb_img) + '.pkl'
+    with open(fname_pd_trainer) as outfile:    
+        score_trainers = pickle.load(outfile)
+        outfile.close()
+
+    from sct_sdika import find_id_extr_df
+    best_trainer_idx = find_id_extr_df(score_trainers, mm+'_moy')[1]
+
+    path_input_train = path_local + 'input_train_' + cc + '_' + str(nb_img) + '/' + str(int(best_trainer_idx.split('0')[1])/50).zfill(3) + '/' + best_trainer_idx + '.txt'
+    
+    train_subj_lst = []
+    text = open(path_input_train, 'r').read()
+    for tt in text.split('\n'):
+        name = tt.split('/')[-1]
+        if len(name):
+            train_subj_lst.append(name.split('_'+cc)[0])
+
+    fname_test_valid_pd = path_local + 'test_valid_' + cc + '.pkl'
+    with open(fname_test_valid_pd) as outfile:    
+        test_valid_pd = pickle.load(outfile)
+        outfile.close()
+    train_test_pd = test_valid_pd[['patho', 'resol', 'subj_name']]
+    subj_name_lst = train_test_pd.subj_name.values.tolist()
+    train_test_pd['train_test'] = ['train' if f in train_subj_lst else 'test' for f in subj_name_lst]
+
+    train_test_pd.to_pickle(fname_out_pd)
+  
+    print '# of patient in: '
+    print '... training:' + str(len(train_test_pd[(train_test_pd.patho == 'patient') & (train_test_pd.train_test == 'train')]))
+    print '... testing:' + str(len(train_test_pd[(train_test_pd.patho == 'patient') & (train_test_pd.train_test == 'test')]))
+    print '# of no-iso in: '
+    print '... training:' + str(len(train_test_pd[(train_test_pd.resol == 'not') & (train_test_pd.train_test == 'train')]))
+    print '... testing:' + str(len(train_test_pd[(train_test_pd.resol == 'not') & (train_test_pd.train_test == 'test')]))
+
+    return path_input_train, train_subj_lst, train_test_pd, test_valid_pd
+
+def test_seg(path_local, cc, nb_img, mm, path_ferguson_cur):
+
+    path_centerline_svm = path_local + 'output_nii_' + cc + '_0/0_' + str(nb_img).zfill(3) + '/'
+    path_txt_best, train_subj_lst, train_test_pd, test_valid_pd = panda_seg(path_local, cc, nb_img, mm)
+
+    path_centerline_input = path_local + 'input_propseg_' + cc + '/'
+    path_centerline_input_nb_img = path_centerline_input + str(nb_img) + '/'
+    create_folders_local([path_centerline_input, path_centerline_input_nb_img])
+
+    all_subj_lst = test_valid_pd.subj_name.values.tolist()
+    subj_done_lst = [f.split('_'+cc)[0] for f in os.listdir(path_centerline_svm) if f.endswith('.nii.gz')]
+    subj_done_entire_lst = [f for f in os.listdir(path_centerline_svm) if f.endswith('.nii.gz')]
+
+    subj2do_lst = []
+    print train_subj_lst
+    for subj in all_subj_lst:
+        if subj in subj_done_lst and subj not in train_subj_lst:
+            subj_cur = subj_done_entire_lst[subj_done_lst.index(subj)]
+            path_src = path_centerline_svm + subj_cur
+            path_dst = path_centerline_input_nb_img + subj_cur
+
+            shutil.copyfile(path_src, path_dst)
+        elif subj not in train_subj_lst:
+            subj2do_lst.append(subj)
+
+    # pickle_ferguson = {
+    #                   'contrast': cc,
+    #                   'nb_image_train': 5228,
+    #                   'valid_subj': subj2do_lst,
+    #                   'path_ferguson': path_ferguson_cur
+    #                   }
+    # path_pickle_ferguson = path_local + 'ferguson_config.pkl'
+    # output_file = open(path_pickle_ferguson, 'wb')
+    # pickle.dump(pickle_ferguson, output_file)
+    # output_file.close()
+
+    # os.system('scp -r ' + path_input_train + ' ferguson:' + path_ferguson_cur)
+    # os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson_cur)
+
+
+def run_propseg_seg(path_local, cc, nb_img, mm):
+
+    path_centerline_input = path_local + 'output_nii_' + cc + '_666/0_' + str(nb_img).zfill(3) + '/'
+    path_data = path_local + 'input_nii_' + cc + '/'
+
+    
+    path_seg_out = path_local + 'output_svm_propseg_' + cc + '/'
+    path_seg_out_cur = path_seg_out + str(nb_img) + '/'
+    create_folders_local([path_seg_out, path_seg_out_cur])
+    # path_seg_out_cur=path_seg_out_cur[1:]
+
+    path_seg_out_propseg = path_local + 'output_propseg_' + cc + '/'
+    create_folders_local([path_seg_out_propseg])
+    # path_seg_out_propseg=path_seg_out_propseg[1:]
+
+    if cc == 't2s':
+        cc = 't2'
+
+    for ctr_file in os.listdir(path_centerline_input)[::-1]:
+        if '.nii.gz' in ctr_file:
+            subj_cur = path_data + ctr_file.split('_centerline_pred')[0] + '.nii.gz'
+            ctr_cur = path_centerline_input + ctr_file
+            print ctr_file
+
+            seg_propseg_out = path_seg_out_propseg + ctr_file.split('_centerline_pred')[0] + '_seg.nii.gz'
+            seg_svm_out = path_seg_out_cur + ctr_file.split('_centerline_pred')[0] + '_seg.nii.gz'
+
+            if not os.path.isfile(seg_svm_out):
+                print 'sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -init-centerline ' + ctr_cur + ' -ofolder ' + path_seg_out_cur
+                os.system('sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -init-centerline ' + ctr_cur + ' -ofolder ' + path_seg_out_cur)
+                if os.path.isfile(path_seg_out_cur+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz'):
+                    os.remove(path_seg_out_cur+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz')
+           
+            if not os.path.isfile(seg_propseg_out):
+                print 'sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -ofolder ' + path_seg_out_propseg
+                os.system('sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -ofolder ' + path_seg_out_propseg)
+                if os.path.isfile(path_seg_out_propseg+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz'):
+                    os.remove(path_seg_out_propseg+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz')
+
+    # fname_out_pd = path_seg_out + str(nb_img) + '.pkl'
+
+    # with open(path_local + 'train_test_' + cc + '.pkl') as outfile:    
+    #     train_test_pd = pickle.load(outfile)
+    #     outfile.close()
+
+    # res_pd = train_test_pd[train_test_pd.train_test=='test'][['patho', 'resol', 'subj_name']]
+    # subj_name_lst = res_pd.subj_name.values.tolist()
+
+    # res_pd['dice_svm'] = [0.0 for i in range(len(subj_name_lst))]
+    # for file in os.listdir(path_seg_out_cur):
+    #     if file.endswith('.nii.gz'):
+    #         file_src = path_seg_out_cur+file
+    #         file_dst = path_data + file.split('_centerline')[0] + '_seg.nii.gz'
+    #         subj_id = file.split('_'+cc)[0]
+    #         file_dice = path_seg_out_cur+subj_id+'.txt'
+    #         os.system('sct_dice_coefficient -i ' + file_src + ' -d ' + file_dst + ' -o ' + file_dice)
+    #         text = open(file_dice, 'r').read()
+    #         res_pd[res_pd.subj_name==subj_id]['dice_svm'] = float(text.split('= ')[1].split('\n')[0])
+
+    # res_pd['propseg'] = [0.0 for i in range(len(subj_name_lst))]
+    # for file in os.listdir(path_seg_out_propseg):
+    #     if file.endswith('_seg.nii.gz'):
+    #         file_src = path_seg_out_propseg+file
+    #         file_dst = path_data + file
+    #         subj_id = file.split('_'+cc)[0]
+    #         file_dice = path_seg_out_propseg+subj_id+'.txt'
+    #         if os.path.isfile(file_src):
+    #             os.system('sct_dice_coefficient -i ' + file_src + ' -d ' + file_dst + ' -o ' + file_dice)
+    #             text = open(file_dice, 'r').read()
+    #             res_pd[res_pd.subj_name==subj_id]['dice_propseg'] = float(text.split('= ')[1].split('\n')[0])
+
+    # print res_pd
 
 
 # ****************************      USER CASE      *****************************************
@@ -320,6 +472,8 @@ def readCommand(  ):
     parser.add_argument('-c', '--contrast', help='Contrast of Interest', required = False)
     parser.add_argument('-s', '--step', help='Prepare (step=0) or Push (step=1) or Pull (step 2) or Compute metrics (step=3) or Display results (step=4)', 
                                         required = False)
+    parser.add_argument('-n', '--nb_train_img', help='Nb Training Images', required = False)
+
     arguments = parser.parse_args()
     return arguments
 
@@ -342,12 +496,16 @@ if __name__ == '__main__':
         step = 0
     else:
         step = int(parse_arg.step)  
+    if not parse_arg.nb_train_img:
+        nb_train_img = 1
+    else:
+        nb_train_img = int(parse_arg.nb_train_img)
 
     # Format of parser arguments
     contrast_of_interest = str(parse_arg.contrast) 
 
 
-    # prepare_dataset_cnn(path_local_sdika, contrast_of_interest, '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/datasets.pbz2')
+    prepare_dataset_cnn(path_local_sdika, contrast_of_interest, '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/datasets.pbz2')
 
 
     if not step:
@@ -362,7 +520,12 @@ if __name__ == '__main__':
     elif step == 5:
         plot_comparison_nb_train(path_local_sdika, contrast_of_interest)
 
-    print TODO_STRING
+    elif step == 6:
+        test_seg(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage', '/home/neuropoly/code/spine-ms-t2/')
+    
+    elif step == 7:
+        run_propseg_seg(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage')
+
 
 
 

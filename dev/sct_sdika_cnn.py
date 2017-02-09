@@ -705,6 +705,8 @@ def readCommand(  ):
     parser.add_argument('-l', '--llambda', help='Lambda Sdika', required = False)
     parser.add_argument('-s', '--step', help='Prepare (step=0) or Push (step=1) or Pull (step 2) or Compute metrics (step=3) or Display results (step=4)', 
                                         required = False)
+    parser.add_argument('-n', '--nb_train_img', help='Nb Training Images', required = False)
+
     arguments = parser.parse_args()
     return arguments
 
@@ -730,10 +732,15 @@ if __name__ == '__main__':
 
     path_ferguson = '/home/neuropoly/code/spine-cnn/'
 
+    if not parse_arg.nb_train_img:
+        nb_train_img = 1
+    else:
+        nb_train_img = int(parse_arg.nb_train_img)  
+
     if not parse_arg.step:
         step = 0
     else:
-        step = int(parse_arg.step)  
+        step = int(parse_arg.step) 
 
     # Format of parser arguments
     contrast_of_interest = str(parse_arg.contrast)
@@ -773,6 +780,106 @@ if __name__ == '__main__':
 
     elif step == 3:
         compute_dataset_stats(path_local_sdika, contrast_of_interest, llambda)
+
+    elif step == 4:
+        with open(path_local_sdika + 'patho_dct_t1.pkl') as outfile:    
+            patho_t1 = pickle.load(outfile)
+            outfile.close()
+        with open(path_local_sdika + 'patho_dct_t2s.pkl') as outfile:    
+            patho_t2s = pickle.load(outfile)
+            outfile.close()
+        with open(path_local_sdika + 'patho_dct_t2.pkl') as outfile:    
+            patho_t2 = pickle.load(outfile)
+            outfile.close()
+
+        print patho_t1.keys()
+        print patho_t2s.keys()
+        print patho_t2.keys()
+
+        all_lst_t2 = [elt for dd in patho_t2 for elt in patho_t2[dd]]
+        all_lst_t1 = [elt for dd in patho_t1 for elt in patho_t1[dd]]
+        all_lst_t2s = [elt for dd in patho_t2s for elt in patho_t2s[dd]]
+        all_lst = [a for l in [all_lst_t2, all_lst_t1, all_lst_t2s] for a in l]
+
+        patient_lst = []
+        patho_lst = []
+        for cc in [patho_t2, patho_t1, patho_t2s]:
+            for dd in cc:
+                if not dd == u'HC':
+                    for pp in cc[dd]:
+                        if not pp in patient_lst:
+                            patho_lst.append(dd)
+                            patient_lst.append(pp)
+        print patho_lst
+        from collections import Counter
+        print Counter(patho_lst)
+
+    elif step == 5:
+
+        path_seg_out = path_local_sdika + 'output_svm_propseg_' + contrast_of_interest + '/'
+        path_seg_out = path_local_sdika + 'output_svm_propseg_' + contrast_of_interest + '/'
+        path_seg_out_propseg = path_local_sdika + 'output_propseg_' + contrast_of_interest + '/'
+        path_data = path_local_sdika + 'input_nii_' + contrast_of_interest + '/'
+        path_seg_out_cur = path_seg_out + str(nb_train_img) + '/'
+        path_seg_out_propseg = path_local_sdika + 'output_propseg_' + contrast_of_interest + '/'
+
+
+        fname_out_pd = path_seg_out + str(nb_train_img) + '.pkl'
+        with open(path_local_sdika + 'train_test_' + contrast_of_interest + '.pkl') as outfile:    
+            train_test_pd = pickle.load(outfile)
+            outfile.close()
+
+        res_pd = train_test_pd[train_test_pd.train_test=='test'][['patho', 'resol', 'subj_name']]
+        subj_name_lst = res_pd.subj_name.values.tolist()
+
+        res_pd['dice_svm'] = [0.0 for i in range(len(subj_name_lst))]
+        fail_svm = []
+        for file in os.listdir(path_seg_out_cur):
+            if file.endswith('.nii.gz'):
+                file_src = path_seg_out_cur+file
+                file_dst = path_data + file
+                subj_id = file.split('_'+contrast_of_interest)[0]
+                file_dice = path_seg_out_cur+subj_id+'.txt'
+                if os.path.isfile(file_src):
+                    if not os.path.isfile(file_dice):
+                        os.system('sct_dice_coefficient -i ' + file_src + ' -d ' + file_dst + ' -o ' + file_dice)
+                    if os.path.isfile(file_dice):
+                        text = open(file_dice, 'r').read()
+                        # os.remove(file_dice)
+                        print 'svm'
+                        if len(text.split('= '))>1:
+                            print len(text.split('= '))
+                            print float(text.split('= ')[1])
+                            res_pd[res_pd.subj_name==subj_id]['dice_svm'] = float(text.split('= ')[1])
+                        else:
+                            fail_svm.append(subj_id)
+                    else:
+                        fail_svm.append(subj_id)
+
+        res_pd['propseg'] = [0.0 for i in range(len(subj_name_lst))]
+        for file in os.listdir(path_seg_out_propseg):
+            if file.endswith('_seg.nii.gz'):
+                file_src = path_seg_out_propseg+file
+                file_dst = path_data + file
+                subj_id = file.split('_'+contrast_of_interest)[0]
+                file_dice = path_seg_out_propseg+subj_id+'.txt'
+                if os.path.isfile(file_src):
+                    if not os.path.isfile(file_dice):
+                        os.system('sct_dice_coefficient -i ' + file_src + ' -d ' + file_dst + ' -o ' + file_dice)
+                    if os.path.isfile(file_dice):
+                        text = open(file_dice, 'r').read()
+                        # os.remove(file_dice)
+                        print 'propseg'
+                        if len(text.split('= '))>1:
+                            print len(text.split('= '))
+                            print float(text.split('= ')[1])
+                            res_pd[res_pd.subj_name==subj_id]['dice_propseg'] = float(text.split('= ')[1])
+
+
+        print res_pd
+        print fail_svm
+        res_pd.to_pickle(path_seg_out + str(nb_train_img) + '_res.pkl')
+
 
     print TODO_STRING
 

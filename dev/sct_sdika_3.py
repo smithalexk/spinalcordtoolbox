@@ -476,7 +476,7 @@ def send_data2ferguson(path_local, path_ferguson, cc, nb_img):
     output_file.close()
 
     # os.system('scp -r ' + path_local + 'input_img_' + contrast_of_interest + '/' + ' ferguson:' + path_ferguson)
-    # os.system('scp -r ' + path_local_train_cur + ' ferguson:' + path_ferguson)
+    os.system('scp -r ' + path_local_train_cur + ' ferguson:' + path_ferguson)
     os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
 
 
@@ -1587,7 +1587,6 @@ if __name__ == '__main__':
             elif step == 3:
                 # Compute metrics / Evaluate performance of Sdika algorithm
                 compute_dataset_stats(path_local_sdika, contrast_of_interest, nb_train_img)
-                # panda_trainer(path_local, cc)
 
             elif step == 4:
                 # Plot dataset results
