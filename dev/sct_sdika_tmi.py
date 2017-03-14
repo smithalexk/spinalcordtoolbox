@@ -21,6 +21,11 @@ import sct_utils as sct
 from sct_sdika import plot_comparison_classifier_oneline
 # ***************************************************************************************
 
+
+
+# Notes:
+#         - soucis sct_process_segmentation sur 6 sujets T1 --> path_t1.pkl incomplet
+
 # ****************************      UTILS FUNCTIONS      ********************************
 
 def create_folders_local(folder2create_lst):
@@ -306,6 +311,66 @@ def convert_nii2img(path_nii2convert, path_out):
 
     return fname_img
 
+
+def find_resol(fname_lst, info_pd):
+
+    print [f.split('/')[-1] for f in fname_lst][67]
+    print info_pd.subj_name.values.tolist()[67]
+
+    resol_lst = []
+    in_plane_ax, in_plane_iso, in_plane_sag = [], [], []
+    thick_ax, thick_iso, thick_sag = [], [], []
+    for img_path, img_subj in zip(fname_lst, info_pd.subj_name.values.tolist()):
+      img = Image(img_path)
+
+      resol_cur_lst = [round(dd) for dd in img.dim[4:7]]
+      if resol_cur_lst.count(resol_cur_lst[0]) == len(resol_cur_lst):
+        resol_lst.append('iso')
+        in_plane_iso.append(img.dim[4])
+        in_plane_iso.append(img.dim[5])
+        thick_iso.append(img.dim[6])
+      elif resol_cur_lst[1]<resol_cur_lst[0]:
+        resol_lst.append('sag')
+        in_plane_sag.append(img.dim[5])
+        in_plane_sag.append(img.dim[6])
+        thick_sag.append(img.dim[4])
+      else:
+        resol_lst.append('ax')
+        in_plane_ax.append(img.dim[4])
+        in_plane_ax.append(img.dim[5])
+        thick_ax.append(img.dim[6])
+
+      del img
+
+    print '\n ax'
+    print len([r for r in resol_lst if r=='ax'])
+    if len([r for r in resol_lst if r=='ax']):
+        print min(in_plane_ax), max(in_plane_ax)
+        print min(thick_ax), max(thick_ax)
+        print thick_ax
+    print '\n iso'
+    print len([r for r in resol_lst if r=='iso'])
+    if len([r for r in resol_lst if r=='iso']):
+        print min(in_plane_iso), max(in_plane_iso)
+        print min(thick_iso), max(thick_iso)
+    print '\n sag'
+    print len([r for r in resol_lst if r=='sag'])
+    if len([r for r in resol_lst if r=='sag']):
+        print min(in_plane_sag), max(in_plane_sag)
+        print min(thick_sag), max(thick_sag)
+
+    info_pd['resol'] = resol_lst
+
+    return info_pd
+    # else:
+    #     with open(fname_pkl_out) as outfile:    
+    #         resol_dct = pickle.load(outfile)
+    #         outfile.close()
+
+    # return resol_dct
+
+
+
 def prepare_dataset(path_local, cc, path_sct_testing_large):
 
     path_local_gold = path_local + 'gold_' + cc + '/'
@@ -317,13 +382,21 @@ def prepare_dataset(path_local, cc, path_sct_testing_large):
     with open(path_local + 'path_' + cc + '.pkl') as outfile:    
         data_pd = pickle.load(outfile)
         outfile.close()
+    with open(path_local + 'info_' + cc + '.pkl') as outfile:    
+        info_pd = pickle.load(outfile)
+        outfile.close()
 
     path_fname_img = [pp+'.nii.gz' for pp in data_pd.path_sct.values.tolist()]
     path_fname_seg = [pp+'_seg_manual.nii.gz' for pp in data_pd.path_sct.values.tolist()]
 
     path_img2convert = transform_nii_img(path_fname_img, path_local_input_nii)
-    path_seg2convert = transform_nii_seg(path_fname_seg, path_local_input_nii, path_local_gold)
-    print len(path_seg2convert)
+    if not 'resol' in info_pd:
+        info_pd = find_resol(path_img2convert, info_pd)
+        print info_pd
+        info_pd.to_pickle(path_local + 'info_' + cc + '.pkl')
+
+    # path_seg2convert = transform_nii_seg(path_fname_seg, path_local_input_nii, path_local_gold)
+    # print len(path_seg2convert)
     # path_imgseg2convert = path_img2convert + path_seg2convert
     # fname_img_lst = convert_nii2img(path_imgseg2convert, path_local_input_img)
 
@@ -338,7 +411,7 @@ def prepare_dataset(path_local, cc, path_sct_testing_large):
 
 def panda_dataset(path_local, cc, path_large):
 
-  info_dct = {'subj_name': [], 'patho': [], 'resol': [], 'center': []}
+  info_dct = {'subj_name': [], 'patho': [], 'center': []}
   path_dct = {'subj_name': [], 'path_sct': []}
   for subj_fold in os.listdir(path_large):
     path_subj_fold = path_large + subj_fold + '/'
@@ -392,7 +465,6 @@ def panda_dataset(path_local, cc, path_large):
                         info_dct['patho'].append('HC')
                     else:
                         info_dct['patho'].append(str(data_description['Pathology']))
-                    info_dct['resol'].append('todo')
 
 
   info_pd = pd.DataFrame.from_dict(info_dct)
@@ -410,8 +482,6 @@ def panda_dataset(path_local, cc, path_large):
   info_pd['train_test'] = ['test' for i in range(len(data_lst))]
   for s in training_lst:
       info_pd.loc[info_pd.subj_name==s,'train_test'] = 'train'
-
-  print info_pd
 
   info_pd.to_pickle(path_local + 'info_' + cc + '.pkl')
   path_pd.to_pickle(path_local + 'path_' + cc + '.pkl')
@@ -1483,13 +1553,11 @@ if __name__ == '__main__':
             panda_dataset(path_local_sdika, contrast_of_interest, path_sct_testing_large)
             prepare_dataset(path_local_sdika, contrast_of_interest, path_sct_testing_large)
 
+            # parler avec Sara pour le nombre de k
+            # nettoyer ferguson
+            # upload soft sur ferguson
+            # upload script sur ferguson
 
-        # if not step:
-        #     # if not os.path.isfile(path_local_sdika+'resol_dct_'+contrast_of_interest+'.pkl'):
-        #     partition_resol(path_local_sdika, contrast_of_interest)
-
-        #     # Prepare [contrast] data
-        #     # prepare_dataset(path_local_sdika, [contrast_of_interest], path_sct_testing_large)
             
         #     # Send Script to Ferguson Station
         #     # os.system('scp ' + fname_local_script + ' ferguson:' + '/home/neuropoly/code/spine-ms/')
