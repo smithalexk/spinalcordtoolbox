@@ -21,6 +21,8 @@ from operator import itemgetter
 import time
 import argparse
 
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 TODO_STRING = """\n
@@ -825,61 +827,121 @@ if __name__ == '__main__':
 
 
         fname_out_pd = path_seg_out + str(nb_train_img) + '.pkl'
-        with open(path_local_sdika + 'train_test_' + contrast_of_interest + '.pkl') as outfile:    
-            train_test_pd = pickle.load(outfile)
-            outfile.close()
 
-        res_pd = train_test_pd[train_test_pd.train_test=='test'][['patho', 'resol', 'subj_name']]
-        subj_name_lst = res_pd.subj_name.values.tolist()
+        if not os.path.isfile(fname_out_pd):
+            with open(path_local_sdika + 'test_valid_' + contrast_of_interest + '.pkl') as outfile:    
+                train_test_pd = pickle.load(outfile)
+                outfile.close()
 
-        res_pd['dice_svm'] = [0.0 for i in range(len(subj_name_lst))]
-        fail_svm = []
-        for file in os.listdir(path_seg_out_cur):
-            if file.endswith('.nii.gz'):
-                file_src = path_seg_out_cur+file
-                file_dst = path_data + file
-                subj_id = file.split('_'+contrast_of_interest)[0]
-                file_dice = path_seg_out_cur+subj_id+'.txt'
-                if os.path.isfile(file_src):
+            print train_test_pd
+
+            res_pd = train_test_pd[train_test_pd.valid_test=='test'][['patho', 'resol', 'subj_name']]
+            subj_name_lst = res_pd.subj_name.values.tolist()
+
+            res_pd['dice_svm'] = [0.0 for i in range(len(subj_name_lst))]
+            res_pd[' '] = [' ' for i in range(len(subj_name_lst))]
+            for file in os.listdir(path_seg_out_cur):
+                if file.endswith('.nii.gz'):
+                    file_src = path_seg_out_cur+file
+                    file_dst = path_data + file
+                    subj_id = file.split('_'+contrast_of_interest)[0]
+                    file_dice = path_seg_out_cur+subj_id+'.txt'
                     if not os.path.isfile(file_dice):
                         os.system('sct_dice_coefficient -i ' + file_src + ' -d ' + file_dst + ' -o ' + file_dice)
-                    if os.path.isfile(file_dice):
-                        text = open(file_dice, 'r').read()
-                        # os.remove(file_dice)
-                        print 'svm'
-                        if len(text.split('= '))>1:
-                            print len(text.split('= '))
-                            print float(text.split('= ')[1])
-                            res_pd[res_pd.subj_name==subj_id]['dice_svm'] = float(text.split('= ')[1])
-                        else:
-                            fail_svm.append(subj_id)
+                    text = open(file_dice, 'r').read()
+                    print 'svm'
+                    if len(text.split('= '))>1:
+                        print float(text.split('= ')[1])
+                        res_pd.loc[res_pd.subj_name==subj_id,'dice_svm'] = float(text.split('= ')[1])
                     else:
-                        fail_svm.append(subj_id)
+                        os.system('sct_register_multimodal -i ' + file_src + ' -d ' + file_dst + ' -identity 1 -ofolder ' + path_seg_out_cur)
+                        file_src_reg = file_src.split('.nii.gz')[0] + '_src_reg.nii.gz'
+                        os.system('sct_dice_coefficient -i ' + file_src_reg + ' -d ' + file_dst + ' -o ' + file_dice)
+                        text = open(file_dice, 'r').read()
+                        if len(text.split('= '))>1:
+                            res_pd.loc[res_pd.subj_name==subj_id,'dice_svm'] = float(text.split('= ')[1])
 
-        res_pd['propseg'] = [0.0 for i in range(len(subj_name_lst))]
-        for file in os.listdir(path_seg_out_propseg):
-            if file.endswith('_seg.nii.gz'):
-                file_src = path_seg_out_propseg+file
-                file_dst = path_data + file
-                subj_id = file.split('_'+contrast_of_interest)[0]
-                file_dice = path_seg_out_propseg+subj_id+'.txt'
-                if os.path.isfile(file_src):
+            res_pd['dice_propseg'] = [0.0 for i in range(len(subj_name_lst))]
+            for file in os.listdir(path_seg_out_propseg):
+                if file.endswith('_seg.nii.gz'):
+                    file_src = path_seg_out_propseg+file
+                    file_dst = path_data + file
+                    subj_id = file.split('_'+contrast_of_interest)[0]
+                    file_dice = path_seg_out_propseg+subj_id+'.txt'
                     if not os.path.isfile(file_dice):
                         os.system('sct_dice_coefficient -i ' + file_src + ' -d ' + file_dst + ' -o ' + file_dice)
-                    if os.path.isfile(file_dice):
+                    text = open(file_dice, 'r').read()
+                    print 'propseg'
+                    if len(text.split('= '))>1:
+                        print float(text.split('= ')[1])
+                        res_pd.loc[res_pd.subj_name==subj_id,'dice_propseg'] = float(text.split('= ')[1])
+                    else:
+                        os.system('sct_register_multimodal -i ' + file_src + ' -d ' + file_dst + ' -identity 1 -ofolder ' + path_seg_out_propseg)
+                        file_src_reg = file_src.split('.nii.gz')[0] + '_src_reg.nii.gz'
+                        os.system('sct_dice_coefficient -i ' + file_src_reg + ' -d ' + file_dst + ' -o ' + file_dice)
                         text = open(file_dice, 'r').read()
-                        # os.remove(file_dice)
-                        print 'propseg'
-                        if len(text.split('= '))>1:
-                            print len(text.split('= '))
-                            print float(text.split('= ')[1])
-                            res_pd[res_pd.subj_name==subj_id]['dice_propseg'] = float(text.split('= ')[1])
+                        res_pd.loc[res_pd.subj_name==subj_id,'dice_svm'] = float(text.split('= ')[1])
 
+            res_pd = res_pd[res_pd.dice_svm != 0.0]
+            print res_pd
+            res_pd.to_pickle(fname_out_pd)
+
+        else:
+            with open(fname_out_pd) as outfile:    
+                res_pd = pickle.load(outfile)
+                outfile.close()
 
         print res_pd
-        print fail_svm
-        res_pd.to_pickle(path_seg_out + str(nb_train_img) + '_res.pkl')
+        stg_propseg = 'Mean = ' + str(round(np.mean(res_pd.dice_propseg.values.tolist()),2))
+        stg_propseg += '\nStd = ' + str(round(np.std(res_pd.dice_propseg.values.tolist()),2))
+        stg_propseg += '\nMedian = ' + str(round(np.median(res_pd.dice_propseg.values.tolist()),2))
+        stg_svm = 'Mean = ' + str(round(np.mean(res_pd.dice_svm.values.tolist()),2))
+        stg_svm += '\nStd = ' + str(round(np.std(res_pd.dice_svm.values.tolist()),2))
+        stg_svm += '\nMedian = ' + str(round(np.median(res_pd.dice_svm.values.tolist()),2))
+        stg_svm += '\nMin = ' + str(round(np.min(res_pd.dice_svm.values.tolist()),2))
+        print stg_svm
+        print stg_propseg
+        print res_pd[res_pd.dice_svm<0.50]
 
+
+        # y_label_stg = 'DICE coefficient per testing subject'
+
+        # y_lim_min, y_lim_max = -0.01, 1.01
+        # y_stg_loc = 0.5
+
+        # sns.set(style="whitegrid", palette="Set1", font_scale=1.3)
+        # palette_swarm = dict(patient = 'crimson', hc = 'darkblue')
+        # fig, axes = plt.subplots(1, 1, sharey='col', figsize=(24, 8))
+        # fig.subplots_adjust(left=0.05, bottom=0.05)
+        # color_lst = [(0.40000000596046448, 0.7607843279838562, 0.64705884456634521), (0.55432528607985565, 0.62711267120697922, 0.79595541393055635)]
+        
+        # a = plt.subplot(1, 2, 1)
+        # sns.violinplot(x=' ', y='dice_propseg', data=res_pd,
+        #                       inner="quartile", cut=0, scale="width",
+        #                       sharey=True,  color=color_lst[0])
+        # sns.swarmplot(x=' ', y='dice_propseg', data=res_pd,
+        #                       hue='patho', size=5, palette=palette_swarm)
+        # a.set_ylabel(y_label_stg, fontsize=13)
+        # a.set_xlabel('PropSeg without initialization', fontsize=13)
+        # a.set_ylim([y_lim_min,y_lim_max])
+
+        # b = plt.subplot(1, 2, 2)
+        # sns.violinplot(x=' ', y='dice_svm', data=res_pd,
+        #                       inner="quartile", cut=0, scale="width",
+        #                       sharey=True,  color=color_lst[1])
+        # sns.swarmplot(x=' ', y='dice_svm', data=res_pd,
+        #                       hue='patho', size=5, palette=palette_swarm)
+        # b.set_ylabel(y_label_stg, fontsize=13)
+        # b.set_xlabel('PropSeg with Sdika initialization', fontsize=13)
+        # b.set_ylim([y_lim_min,y_lim_max])
+
+        # a.text(0.3, y_stg_loc, stg_propseg, fontsize=13)
+        # b.text(0.3, y_stg_loc, stg_svm, fontsize=13)
+
+        # # plt.show()
+        # fig.tight_layout()
+        # fig.savefig(path_seg_out + str(nb_train_img) + '.png')
+        # plt.close()
 
     print TODO_STRING
 

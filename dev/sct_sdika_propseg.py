@@ -391,7 +391,7 @@ def test_seg(path_local, cc, nb_img, mm, path_ferguson_cur):
 
 def run_propseg_seg(path_local, cc, nb_img, mm):
 
-    path_centerline_input = path_local + 'output_nii_' + cc + '_666/0_' + str(nb_img).zfill(3) + '/'
+    path_centerline_input = path_local + 'output_nii_' + cc + '_11/0_' + str(nb_img).zfill(3) + '/'
     path_data = path_local + 'input_nii_' + cc + '/'
 
     
@@ -422,15 +422,15 @@ def run_propseg_seg(path_local, cc, nb_img, mm):
                 if os.path.isfile(path_seg_out_cur+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz'):
                     os.remove(path_seg_out_cur+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz')
            
-            if not os.path.isfile(seg_propseg_out):
-                print 'sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -ofolder ' + path_seg_out_propseg
-                os.system('sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -ofolder ' + path_seg_out_propseg)
-                if os.path.isfile(path_seg_out_propseg+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz'):
-                    os.remove(path_seg_out_propseg+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz')
+            # if not os.path.isfile(seg_propseg_out):
+            #     print 'sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -ofolder ' + path_seg_out_propseg
+            #     os.system('sct_propseg -i ' + subj_cur + ' -c ' + cc + ' -ofolder ' + path_seg_out_propseg)
+            #     if os.path.isfile(path_seg_out_propseg+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz'):
+            #         os.remove(path_seg_out_propseg+ctr_file.split('_centerline_pred')[0]+'_centerline.nii.gz')
 
     # fname_out_pd = path_seg_out + str(nb_img) + '.pkl'
 
-    # with open(path_local + 'train_test_' + cc + '.pkl') as outfile:    
+    # with open(path_local + 'test_valid_' + cc + '.pkl') as outfile:    
     #     train_test_pd = pickle.load(outfile)
     #     outfile.close()
 
@@ -505,7 +505,7 @@ if __name__ == '__main__':
     contrast_of_interest = str(parse_arg.contrast) 
 
 
-    prepare_dataset_cnn(path_local_sdika, contrast_of_interest, '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/datasets.pbz2')
+    # prepare_dataset_cnn(path_local_sdika, contrast_of_interest, '/Volumes/data_processing/bdeleener/machine_learning/filemanager_t2s_new/datasets.pbz2')
 
 
     if not step:

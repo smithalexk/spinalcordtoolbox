@@ -475,7 +475,6 @@ def send_data2ferguson(path_local, path_ferguson, cc, nb_img):
     pickle.dump(pickle_ferguson, output_file)
     output_file.close()
 
-    # os.system('scp -r ' + path_local + 'input_img_' + contrast_of_interest + '/' + ' ferguson:' + path_ferguson)
     os.system('scp -r ' + path_local_train_cur + ' ferguson:' + path_ferguson)
     os.system('scp ' + path_pickle_ferguson + ' ferguson:' + path_ferguson)
 
@@ -1568,11 +1567,10 @@ if __name__ == '__main__':
                 step = int(parse_arg.step)            
 
             if not step:
-                # Prepare [contrast] data
-                # prepare_dataset(path_local_sdika, [contrast_of_interest], path_sct_testing_large)
+                prepare_dataset(path_local_sdika, [contrast_of_interest], path_sct_testing_large)
                 
                 # Send Script to Ferguson Station
-                os.system('scp ' + fname_local_script + ' ferguson:' + path_ferguson)
+                # os.system('scp ' + fname_local_script + ' ferguson:' + path_ferguson)
 
             elif step == 1:
                 panda_dataset(path_local_sdika, contrast_of_interest)
@@ -1588,45 +1586,6 @@ if __name__ == '__main__':
                 # Compute metrics / Evaluate performance of Sdika algorithm
                 compute_dataset_stats(path_local_sdika, contrast_of_interest, nb_train_img)
 
-            elif step == 4:
-                # Plot dataset results
-                # run_plot_violin(path_local_sdika, contrast_of_interest, nb_train_img, 'plot_'+contrast_of_interest+'_'+str(nb_train_img)+'_all')
-
-            # elif step == 5:
-            #     # Partition dataset into ISO, AX and SAG
-            #     resol_dct = partition_resol(path_local_sdika, contrast_of_interest)
-
-            #     # Partition dataset into HC // DCM // MS 
-            #     with open(path_local_sdika + 'patho_dct_' + contrast_of_interest + '.pkl') as outfile:    
-            #         patho_dct = pickle.load(outfile)
-            #         outfile.close()
-
-                # compute_best_trainer(path_local_sdika, contrast_of_interest, nb_train_img, ['mse', 'maxmove', 'zcoverage'],
-                #                         {'HC': patho_dct['HC'], 'MS': patho_dct['MS'], 'CSM': patho_dct['CSM']})
-                # find_best_trainer(path_local_sdika, contrast_of_interest, nb_train_img, 'mse', ['CSM', 'HC', 'MS'])
-                
-                # compute_best_trainer(path_local_sdika, contrast_of_interest, nb_train_img, ['mse', 'maxmove', 'zcoverage'],
-                #                         {'AX': resol_dct['ax'], 'SAG': resol_dct['sag'], 'ISO': resol_dct['iso']})
-                # find_best_trainer(path_local_sdika, contrast_of_interest, nb_train_img, 'mse', ['AX', 'SAG', 'ISO'])
-
-
-                inter_group(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage', resol_dct)
-            elif step == 6:
-              panda_dataset(path_local_sdika, contrast_of_interest)
-              # find_best_worst(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage')
-                # plot_best_trainer_results(path_local_sdika, contrast_of_interest, nb_train_img, 'maxmove', 'best')
-                # plot_best_trainer_results(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage', 'best')
-                # plot_best_trainer_results(path_local_sdika, contrast_of_interest, nb_train_img, 'maxmove', 'worst')
-                # plot_best_trainer_results(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage', 'worst')
-            elif step == 7:
-                plot_comparison_classifier(path_local_sdika, contrast_of_interest, nb_train_img, 0.35, 'zcoverage')
-                plot_comparison_classifier(path_local_sdika, contrast_of_interest, nb_train_img, 0.35, 'maxmove')
-
-            elif step == 8:
-                plot_comparison_nb_train(path_local_sdika, contrast_of_interest)
-            elif step == 9:
-                plot_trainers_best_worst(path_local_sdika, contrast_of_interest, nb_train_img, 'zcoverage')
-                plot_trainers_best_worst(path_local_sdika, contrast_of_interest, nb_train_img, 'maxmove')
 
             else:
                 print USAGE_STRING
