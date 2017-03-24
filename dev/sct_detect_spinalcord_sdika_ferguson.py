@@ -21,13 +21,6 @@ if config['svm_hog_alone']:
 else:
 	cmd_line_test = './spine_detect -ctype=dpdt -lambda=1 '
 
-# subj_id = []
-# for f in valid_subj:
-# 	if f.endswith('.img') and not '_seg' in f:
-# 		subj_id.append(f.split('.')[0])
-
-# path_sub_train = [path_ferguson_train + f + '/' for f in os.listdir(path_ferguson_train) if os.path.isdir(path_ferguson_train + f)] 
-
 path_sub_train = path_ferguson_train
 
 if os.path.exists(path_ferguson_res_img):
