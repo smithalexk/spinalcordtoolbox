@@ -16,6 +16,7 @@ import sys
 #import time
 from msct_parser import *
 import sct_utils as sct
+import sct_maths
 # from sct_average_data_across_dimension import average_data_across_dimension
 
 
@@ -30,6 +31,8 @@ class Param:
 
 # ----------------------------------------------------------------------------------------------------------------------
 # TSNR -----------------------------------------------------------------------------------------------------------------
+
+
 class Tsnr:
     def __init__(self, param=None, fmri=None, anat=None):
         if param is not None:
@@ -55,29 +58,33 @@ class Tsnr:
         # # print sct.slash_at_the_end(path_fmri) + fname_fmri
         # # sct.run('mcflirt -in ' + sct.slash_at_the_end(path_fmri, 1) + fname_fmri + ' -out ' + fname_fmri_moco)
 
-        # compute tsnr
-        sct.printv('\nCompute the tSNR...', self.param.verbose, 'normal')
+        # compute mean
         fname_data_mean = sct.add_suffix(fname_data, '_mean')
-        sct.run('sct_maths -i '+fname_data+' -o '+fname_data_mean+' -mean t')
-        # if not average_data_across_dimension(fname_data, fname_data_mean, 3):
-        #     sct.printv('ERROR in average_data_across_dimension', 1, 'error')
-        # sct.run('fslmaths ' + fname_data + ' -Tmean ' + fname_data_mean)
+        sct_maths.main(args=[
+            '-i', fname_data,
+            '-o', fname_data_mean,
+            '-mean', 't'
+        ])
+
+        # compute STD
         fname_data_std = sct.add_suffix(fname_data, '_std')
-        sct.run('sct_maths -i '+fname_data+' -o '+fname_data_std+' -mean t')
-        # if not average_data_across_dimension(fname_data, fname_data_std, 3, 1):
-        #     sct.printv('ERROR in average_data_across_dimension', 1, 'error')
-        # sct.run('fslmaths ' + fname_data + ' -Tstd ' + fname_data_std)
+        sct_maths.main(args=[
+            '-i', fname_data,
+            '-o', fname_data_std,
+            '-std', 't'
+        ])
+
+        # compute tSNR
         fname_tsnr = sct.add_suffix(fname_data, '_tsnr')
         from msct_image import Image
         nii_mean = Image(fname_data_mean)
         data_mean = nii_mean.data
         data_std = Image(fname_data_std).data
-        data_tsnr = data_mean/data_std
+        data_tsnr = data_mean / data_std
         nii_tsnr = nii_mean
         nii_tsnr.data = data_tsnr
         nii_tsnr.setFileName(fname_tsnr)
         nii_tsnr.save()
-        # sct.run('fslmaths ' + fname_data_mean + ' -div ' + fname_data_std + ' ' + fname_tsnr)
 
         # Remove temp files
         sct.printv('\nRemove temporary files...', self.param.verbose, 'normal')
@@ -87,7 +94,7 @@ class Tsnr:
 
         # to view results
         sct.printv('\nDone! To view results, type:', self.param.verbose, 'normal')
-        sct.printv('fslview '+fname_tsnr+' &\n', self.param.verbose, 'info')
+        sct.printv('fslview ' + fname_tsnr + ' &\n', self.param.verbose, 'info')
 
 
 def get_parser():
@@ -122,8 +129,3 @@ if __name__ == '__main__':
 
         tsnr = Tsnr(param=param, fmri=input_fmri)
         tsnr.compute()
-
-
-
-
-
