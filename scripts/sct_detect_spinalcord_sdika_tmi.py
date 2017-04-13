@@ -2221,8 +2221,8 @@ if __name__ == '__main__':
 
         elif step == 21:
 
-            # cc_lst = ['t2', 't1', 't2s', 'dmri']
-            cc_lst = ['t1', 't2']
+            cc_lst = ['t2', 't1', 't2s', 'dmri']
+            # cc_lst = ['t1', 't2']
             pd_lst = []
             for cc in cc_lst:
                 with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
@@ -2245,6 +2245,42 @@ if __name__ == '__main__':
 
     #         text = open(file_dice, 'r').read()
     #         res_pd[res_pd.subj_name==subj_id]['dice_svm'] = float(text.split('= ')[1].split('\n')[0])
+
+        elif step == 22:
+            list_k = [1, 5, 10, 15]
+            list_cc = ['t1', 't2', 't2s', 'dmri']
+
+            for c in list_cc:
+                print '\nContrast'
+                path_folder_pkl = path_local_sdika + 'output_pkl/' + c + '/'
+                boostrap_k_pd = panda_boostrap_k(path_folder_pkl, list_k)
+                best_k_pd = panda_best_k(path_folder_pkl, boostrap_k_pd, list_k)
+                col_names = ['mse_'+str(k) for k in list_k]
+
+                dct_tmp = {'param': [], 'value': []}
+
+                for k in col_names:
+                    dct_tmp['value'] = best_k_pd[k].values.tolist()
+                    dct_tmp['param'] = [k for i in range(len(best_k_pd[k].values.tolist()))]
+
+                # print '\nkruskal p-value between k=1 and k=5: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                #                                     best_k_pd.mse_5.values.tolist())[1],6)) + '\n'
+                # print '\nkruskal p-value between k=1 and k=10: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                #                                     best_k_pd.mse_10.values.tolist())[1],6)) + '\n'
+                # print '\nkruskal p-value between k=1 and k=15: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                #                                     best_k_pd.mse_15.values.tolist())[1],6)) + '\n'
+
+                print pd.DataFrame.from_dict(dct_tmp)
+
+
+
+
+
+
+
+
+
+
 
 
 
