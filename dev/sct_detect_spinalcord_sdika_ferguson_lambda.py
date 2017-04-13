@@ -5,7 +5,7 @@ import pickle
 ####################################################################################################################
 #   User Case
 
-path_ferguson_work = '/home/neuropoly/code/spine-ms-tmi/'
+path_ferguson_work = '/home/neuropoly/code/spine-ms-tmi-dwi/'
 path_config = path_ferguson_work + 'ferguson_config.pkl'
 with open(path_config) as outfile:    
 	config = pickle.load(outfile)
@@ -27,7 +27,8 @@ if lambda_bool:
 
 	path_sub_train = path_ferguson_train
 
-	txt_name = [f for f in os.listdir(path_sub_train) if f.endswith('.txt') and not '_ctr' in f]
+	# txt_name = [f for f in os.listdir(path_sub_train) if f.endswith('.txt') and not '_ctr' in f]
+	txt_name = [f for f in os.listdir(path_sub_train) if f.endswith('.txt') and not '_ctr' in f and not '_valid' in f]
 	for zz,tt in enumerate(txt_name):
 		path_txt = path_sub_train + tt
 		path_txt_ctr = path_sub_train + tt.split('.')[0] + '_ctr.txt'

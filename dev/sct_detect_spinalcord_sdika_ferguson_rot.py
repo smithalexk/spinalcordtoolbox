@@ -5,7 +5,7 @@ import pickle
 ####################################################################################################################
 #   User Case
 
-path_ferguson_work = '/home/neuropoly/code/spine-ms-tmi/'
+path_ferguson_work = '/home/neuropoly/code/spine-ms-tmi-dwi/'
 path_config = path_ferguson_work + 'ferguson_config.pkl'
 with open(path_config) as outfile:    
 	config = pickle.load(outfile)
@@ -16,10 +16,8 @@ rot_bool = config['rot']
 valid_subj = config['valid_subj']
 path_ferguson_input_img = path_ferguson_work + 'input_img/' + contrast + '/'
 path_ferguson_train = path_ferguson_work + contrast + '_'+ str(nb_image_train) + '/'
-if config['svm_hog_alone']:
-	cmd_line_test = './spine_detect -ctype=maxslice -lambda=1 '
-else:
-	cmd_line_test = './spine_detect -ctype=dpdt -lambda=1 '
+
+cmd_line_test = './spine_detect -ctype=dpdt -lambda=1 '
 
 if rot_bool:
 	cmd_line_train = './spine_train_svm -hogsg -incr=20 --addRot='
@@ -27,7 +25,8 @@ if rot_bool:
 
 	path_sub_train = path_ferguson_train
 
-	txt_name = [f for f in os.listdir(path_sub_train) if f.endswith('.txt') and not '_ctr' in f]
+	# txt_name = [f for f in os.listdir(path_sub_train) if f.endswith('.txt') and not '_ctr' in f]
+	txt_name = [f for f in os.listdir(path_sub_train) if f.endswith('.txt') and not '_ctr' in f and not '_valid' in f]
 	for zz,tt in enumerate(txt_name):
 		path_txt = path_sub_train + tt
 		path_txt_ctr = path_sub_train + tt.split('.')[0] + '_ctr.txt'
