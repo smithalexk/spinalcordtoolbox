@@ -18,6 +18,7 @@ from scipy.stats import ttest_rel, ttest_ind, f_oneway, normaltest, bartlett, no
 # SCT Imports
 from msct_image import Image
 import sct_utils as sct
+import time
 # ***************************************************************************************
 
 # ****************************      UTILS FUNCTIONS      ********************************
@@ -305,6 +306,48 @@ def convert_nii2img(path_nii2convert, path_out):
 
     return fname_img
 
+def info_resol(fname_lst):
+
+    resol_lst = []
+    in_plane_ax, in_plane_iso, in_plane_sag = [], [], []
+    thick_ax, thick_iso, thick_sag = [], [], []
+    for img_path in fname_lst:
+      img = Image(img_path)
+
+      resol_cur_lst = [round(dd) for dd in img.dim[4:7]]
+      if resol_cur_lst.count(resol_cur_lst[0]) == len(resol_cur_lst):
+        resol_lst.append('iso')
+        in_plane_iso.append(img.dim[4])
+        thick_iso.append(img.dim[6])
+      elif resol_cur_lst[1]<resol_cur_lst[0]:
+        resol_lst.append('sag')
+        in_plane_sag.append(img.dim[5])
+        thick_sag.append(img.dim[4])
+      else:
+        resol_lst.append('ax')
+        in_plane_ax.append(img.dim[5])
+        thick_ax.append(img.dim[6])
+
+      del img
+
+    resol_dct = {'ax': {}, 'sag': {}, 'iso': {}}
+    
+    if len([r for r in resol_lst if r=='ax']):
+        resol_dct['ax']['nb'] = len([r for r in resol_lst if r=='ax'])
+        resol_dct['ax']['in_plane'] = in_plane_ax
+        resol_dct['ax']['thick'] = thick_ax
+    
+    if len([r for r in resol_lst if r=='iso']):
+        resol_dct['iso']['nb'] = len([r for r in resol_lst if r=='iso'])
+        resol_dct['iso']['in_plane'] = in_plane_iso
+        resol_dct['iso']['thick'] = thick_iso
+    
+    if len([r for r in resol_lst if r=='sag']):
+        resol_dct['sag']['nb'] = len([r for r in resol_lst if r=='sag'])
+        resol_dct['sag']['in_plane'] = in_plane_sag
+        resol_dct['sag']['thick'] = thick_sag
+
+    return resol_dct
 
 def find_resol(fname_lst, info_pd):
 
@@ -431,9 +474,15 @@ def panda_dataset(path_local, cc, path_large, nb_train_valid):
                 # If manual segmentation of the cord is available
                 if len(data_seg_description['cord']):
 
-                    path_dct['subj_name'].append(subj_fold + '_' + contrast_fold_oI)
+                    if contrast_fold_oI != 'dmri':
+                        path_dct['subj_name'].append(subj_fold + '_' + contrast_fold_oI)
+                    else:
+                        path_dct['subj_name'].append(subj_fold + '_' + 'dwi_mean')
                     info_dct['subj_name'].append(subj_fold + '_' + contrast_fold_oI)
-                    path_dct['path_sct'].append(path_contrast_fold + contrast_fold_oI)
+                    if contrast_fold_oI != 'dmri':
+                        path_dct['path_sct'].append(path_contrast_fold + contrast_fold_oI)
+                    else:
+                        path_dct['path_sct'].append(path_contrast_fold + 'dwi_mean')
 
                     # Extract data information from the dataset_description.json
                     with open(path_subj_fold+'dataset_description.json') as data_file:    
@@ -463,6 +512,7 @@ def panda_dataset(path_local, cc, path_large, nb_train_valid):
   for s in training_lst:
       info_pd.loc[info_pd.subj_name==s,'train_test'] = 'train'
 
+  print info_pd
   info_pd.to_pickle(path_local + 'info_' + cc + '.pkl')
   path_pd.to_pickle(path_local + 'path_' + cc + '.pkl')
 
@@ -509,9 +559,9 @@ def prepare_train(path_local, path_outdoor, cc, nb_img_lst, nb_boostrap):
                 for tt_tt in train_lst_bk:
                     stg += path_outdoor_cur + tt_tt + '\n'
                     stg_seg += path_outdoor_cur + tt_tt + '_seg' + '\n'
-                # for v in valid_lst:
-                #     if v not in train_lst[b]:
-                #         stg_val += v
+                for v in valid_lst:
+                    if v not in train_lst[b]:
+                        stg_val += v + '\n'
                 path2save = path_local_train
                 with open(path2save + str(b).zfill(3) + '.txt', 'w') as text_file:
                     text_file.write(stg)
@@ -519,12 +569,12 @@ def prepare_train(path_local, path_outdoor, cc, nb_img_lst, nb_boostrap):
                 with open(path2save + str(b).zfill(3) + '_ctr.txt', 'w') as text_file:
                     text_file.write(stg_seg)
                     text_file.close()
-                # with open(path2save + str(b).zfill(3) + '_valid.txt', 'w') as text_file:
-                #     text_file.write(stg_val)
-                #     text_file.close()
+                with open(path2save + str(b).zfill(3) + '_valid.txt', 'w') as text_file:
+                    text_file.write(stg_val)
+                    text_file.close()
 
 
-def send_data2ferguson(path_local, pp_ferguson, cc, nb_img, data_lst, path_train, rot_bool=False, lambda_bool=False, optiC_bool=False):
+def send_data2ferguson(path_local, pp_ferguson, cc, nb_img, data_lst, path_train, rot_bool=False, lambda_bool=False, trainer='', dyn=False):
     """
     
       MAIN FUNCTION OF STEP 1
@@ -547,9 +597,10 @@ def send_data2ferguson(path_local, pp_ferguson, cc, nb_img, data_lst, path_train
                         'nb_image_train': nb_img,
                         'valid_subj': data_lst,
                         'path_ferguson': pp_ferguson,
-                        'svm_hog_alone': optiC_bool,
+                        'dyn': dyn,
                         'rot': rot_bool,
-                        'lambda': lambda_bool
+                        'lambda': lambda_bool,
+                        'best_trainer': trainer
                         }
     path_pickle_ferguson = path_local + 'ferguson_config.pkl'
     output_file = open(path_pickle_ferguson, 'wb')
@@ -558,6 +609,8 @@ def send_data2ferguson(path_local, pp_ferguson, cc, nb_img, data_lst, path_train
 
     os.system('scp -r ' + path_train + ' ferguson:' + pp_ferguson)
     os.system('scp ' + path_pickle_ferguson + ' ferguson:' + pp_ferguson)
+
+    print pickle_ferguson
 
 
 # ****************************      STEP 2 FUNCTIONS      *******************************
@@ -602,6 +655,8 @@ def pull_img_rot(path_local, path_ferguson, cc, stg):
     path_local_res_nii = path_local + 'output_nii/' + cc + '/' + stg + '/'
 
     # Pull .img results from ferguson
+    print path_ferguson_res
+    print path_local_res_img_scp
     os.system('scp -r ferguson:' + path_ferguson_res + ' ' + path_local_res_img_scp)
     
     path_local_res_img = path_local + 'output_img/' + cc + '/' + stg + '/'
@@ -624,7 +679,51 @@ def pull_img_rot(path_local, path_ferguson, cc, stg):
                             nib.save(img, path_cur_out)
                         except Exception: 
                             pass
-                        
+
+def pull_img_test(path_local, path_ferguson, cc):
+
+    path_ferguson_res = path_ferguson + 'output_img_' + cc + '/'
+    path_ferguson_res_dyn = path_ferguson + 'output_img_' + cc + '_dyn/'
+    path_local_res_img_scp = path_local + 'output_img/' + cc + '/'
+    path_local_res_nii = path_local + 'output_nii/' + cc + '/optic/'
+    
+    path_local_time = path_local + 'output_time/' + cc + '/optic/'
+    path_local_time_dyn = path_local + 'output_time/' + cc + '/dyn/'
+    if not os.path.exists(path_local_time):
+        os.makedirs(path_local_time)
+    if not os.path.exists(path_local_time_dyn):
+        os.makedirs(path_local_time_dyn)
+
+    os.system('scp -r ferguson:' + path_ferguson_res + ' ' + path_local_res_img_scp)
+    os.system('scp -r ferguson:' + path_ferguson_res_dyn + ' ' + path_local_res_img_scp)
+    
+    path_local_res_img = path_local + 'output_img/' + cc + '/optic/'
+    os.rename(path_local_res_img_scp + 'output_img_' + cc + '/', path_local_res_img[:-1])
+
+    path_local_res_img_dyn = path_local + 'output_img/' + cc + '/dyn/'
+    os.rename(path_local_res_img_scp + 'output_img_' + cc + '_dyn/', path_local_res_img_dyn[:-1])
+
+    for f in os.listdir(path_local_res_img):
+        if not f.startswith('.'):
+            path_res_cur = path_local_res_nii + f + '/'
+            create_folders_local([path_res_cur])
+
+            if os.path.isdir(path_local_res_img+f):
+                for ff in os.listdir(path_local_res_img+f):
+                    if ff.endswith('_ctr.hdr'):
+                        path_cur = path_local_res_img + f + '/' + ff
+                        path_cur_out = path_res_cur + ff.split('_ctr')[0] + '_centerline_pred.nii.gz'
+                        try:
+                            img = nib.load(path_cur)
+                            nib.save(img, path_cur_out)
+                        except Exception: 
+                            pass
+                    elif ff.endswith('_time.txt'):
+                        shutil.copyfile(path_local_res_img + f + '/' + ff, path_local_time+ff)
+                        shutil.copyfile(path_local_res_img_dyn + f + '/' + ff, path_local_time_dyn+ff)  
+
+
+
 
 # ******************************************************************************************
 
@@ -649,21 +748,22 @@ def _compute_stats(img_pred, img_true, img_seg_true):
     for z in range(img_true.dim[2]):
 
         if np.sum(img_true.data[:,:,z]):
-            x_true, y_true = [np.where(img_true.data[:,:,z] > 0)[i][0] 
-                                for i in range(len(np.where(img_true.data[:,:,z] > 0)))]
-            x_pred, y_pred = [np.where(img_pred.data[:,:,z] > 0)[i][0]
-                                for i in range(len(np.where(img_pred.data[:,:,z] > 0)))]
-           
-            xx_seg, yy_seg = np.where(img_seg_true.data[:,:,z]==1.0)
-            xx_yy = [[x,y] for x, y in zip(xx_seg,yy_seg)]
-            if [x_pred, y_pred] in xx_yy:
-                slice_coverage += 1
+            if np.sum(img_pred.data[:,:,z]):
+                x_true, y_true = [np.where(img_true.data[:,:,z] > 0)[i][0] 
+                                    for i in range(len(np.where(img_true.data[:,:,z] > 0)))]
+                x_pred, y_pred = [np.where(img_pred.data[:,:,z] > 0)[i][0]
+                                    for i in range(len(np.where(img_pred.data[:,:,z] > 0)))]
+               
+                xx_seg, yy_seg = np.where(img_seg_true.data[:,:,z]==1.0)
+                xx_yy = [[x,y] for x, y in zip(xx_seg,yy_seg)]
+                if [x_pred, y_pred] in xx_yy:
+                    slice_coverage += 1
 
-            x_true, y_true = img_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], img_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
-            x_pred, y_pred = img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
+                x_true, y_true = img_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], img_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
+                x_pred, y_pred = img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
 
-            dist = ((x_true-x_pred))**2 + ((y_true-y_pred))**2
-            mse_dist.append(dist)
+                dist = ((x_true-x_pred))**2 + ((y_true-y_pred))**2
+                mse_dist.append(dist)
 
             count_slice += 1
 
@@ -671,6 +771,7 @@ def _compute_stats(img_pred, img_true, img_seg_true):
         stats_dct['mse'] = sqrt(sum(mse_dist)/float(count_slice))
         stats_dct['maxmove'] = sqrt(max(mse_dist))
         stats_dct['zcoverage'] = float(slice_coverage*100.0)/count_slice
+
 
     return stats_dct
 
@@ -687,28 +788,37 @@ def _compute_stats_file(fname_ctr_pred, fname_ctr_true, fname_seg_true, fname_ou
 
 def compute_dataset_stats(path_local, cc, suf):
 
-    path_local_nii = path_local + 'output_nii/' + cc + '/' + suf + '/'
-    path_local_res_pkl = path_local + 'output_pkl/' + cc + '/' + suf + '/'
+    if not suf=='hough':
+        path_local_nii = path_local + 'output_nii/' + cc + '/' + suf + '/'
+        path_local_res_pkl = path_local + 'output_pkl/' + cc + '/' + suf + '/'
+    else:
+        path_local_nii = path_local + 'propseg_nii/' + cc + '/'
+        path_local_res_pkl = path_local + 'output_pkl/' + cc + '/'
     path_local_gold = path_local + 'gold/' + cc + '/'
     path_local_seg = path_local + 'input_nii/' + cc + '/'
 
     for f in os.listdir(path_local_nii):
         if not f.startswith('.'):
             path_res_cur = path_local_nii + f + '/'
-            print path_res_cur
-            folder_subpkl_out = path_local_res_pkl + f + '/'
-            create_folders_local([folder_subpkl_out])  
+            
+            if suf == 'hough':
+                folder_subpkl_out = path_local_res_pkl + suf + '/'
+                path_res_cur = path_local_nii
+            else:
+                folder_subpkl_out = path_local_res_pkl + f + '/'
+                create_folders_local([folder_subpkl_out])                
             
             for ff in os.listdir(path_res_cur):
                 if ff.endswith('_centerline_pred.nii.gz'):
                     subj_name_cur = ff.split('_centerline_pred.nii.gz')[0]
+                    if subj_name_cur=='sct_example_data_dmri':
+                        subj_name_cur='unf_sct_example_data_dmri'
                     fname_subpkl_out = folder_subpkl_out + 'res_' + subj_name_cur + '.pkl'
 
                     if not os.path.isfile(fname_subpkl_out):
                         path_cur_pred = path_res_cur + ff
                         path_cur_gold = path_local_gold + subj_name_cur + '_centerline_gold.nii.gz'
                         path_cur_gold_seg = path_local_seg + subj_name_cur + '_seg.nii.gz'
-
                         _compute_stats_file(path_cur_pred, path_cur_gold, path_cur_gold_seg, fname_subpkl_out)
 
 # ******************************************************************************************
@@ -724,17 +834,18 @@ def find_id_extr_df(df, mm):
 
 def panda_boostrap_k(path_folder_pkl, k_lst):
 
+    k_lst = [str(k) for k in k_lst]
+
     boostrap_k_dct = {'it': []}
     for k in k_lst:
-        boostrap_k_dct['mse_moy_'+str(k)] = []
-        boostrap_k_dct['mse_std_'+str(k)] = []
-        boostrap_k_dct['mse_med_'+str(k)] = []
+        boostrap_k_dct['mse_moy_'+k] = []
+        boostrap_k_dct['mse_std_'+k] = []
+        boostrap_k_dct['mse_med_'+k] = []
 
     print boostrap_k_dct
 
     for fold in os.listdir(path_folder_pkl):
       path_nb_cur = path_folder_pkl + fold + '/'
-      
       if os.path.isdir(path_nb_cur) and fold in k_lst:
 
         for tr_subj in os.listdir(path_nb_cur):
@@ -768,6 +879,117 @@ def panda_boostrap_k(path_folder_pkl, k_lst):
     print boostrap_k_pd
 
     return boostrap_k_pd
+
+
+def panda_testing(path_optic_pkl, path_hough_pkl='', info_pd=None, cc=''):
+
+    res_dct = {'mse': [], 'zcoverage': [], 'subj_name': [], 'algo': [], 'contrast': [], 'patho': []}
+
+    for f in os.listdir(path_optic_pkl):
+        if os.path.isdir(path_optic_pkl+f):
+            path_res = path_optic_pkl+f+'/'
+            for file in os.listdir(path_res):
+                if file.endswith('.pkl'):
+                    with open(path_res+file) as outfile:    
+                        metrics = pickle.load(outfile)
+                        outfile.close()
+              
+                    for mm in metrics:
+                        if mm in res_dct:
+                            res_dct[mm].append(metrics[mm])
+
+                    res_dct['subj_name'].append(file.split('res_')[1].split('.pkl')[0])
+                    res_dct['algo'].append('optic')
+                    res_dct['contrast'].append(cc)
+                    patho_cur = info_pd[info_pd.subj_name==file.split('res_')[1].split('.pkl')[0]].patho.values.tolist()[0]
+                    if patho_cur != 'HC':
+                        res_dct['patho'].append('patho')
+                    else:
+                        res_dct['patho'].append(patho_cur)
+
+    if len(path_hough_pkl):
+        for file in os.listdir(path_hough_pkl):
+            if file.endswith('.pkl'):
+                with open(path_hough_pkl+file) as outfile:    
+                    metrics = pickle.load(outfile)
+                    outfile.close()
+          
+                for mm in metrics:
+                    if mm in res_dct:
+                        res_dct[mm].append(metrics[mm])
+
+                res_dct['subj_name'].append(file.split('res_')[1].split('.pkl')[0])
+                res_dct['algo'].append('hough')
+                res_dct['contrast'].append(cc)
+                patho_cur = info_pd[info_pd.subj_name==file.split('res_')[1].split('.pkl')[0]].patho.values.tolist()[0]
+                if patho_cur != 'HC':
+                    res_dct['patho'].append('patho')
+                else:
+                    res_dct['patho'].append(patho_cur)   
+
+    res_pd = pd.DataFrame.from_dict(res_dct)
+    # print res_pd
+    # print res_pd.mse.values.tolist()
+    dct_tmp = dict(Counter(res_pd.subj_name.values.tolist()))
+    for i in dct_tmp:
+        if dct_tmp[i]==1:
+            print i
+
+    return res_pd
+
+def panda_testing_seg(path_data, path_optic, info_pd, cc, algo_name):
+
+    res_dct = {'dice': [], 'time': [], 'subj_name': [], 'algo': [], 'contrast': [], 'patho': []}
+
+    subj_lst = info_pd.subj_name.values.tolist()
+
+    for s in subj_lst:
+        fname_dice = path_optic + s + '_dice.txt'
+        fname_time = path_optic + s + '_time.txt'
+        path_img_cur = path_data + s + '.nii.gz'
+        if os.path.isfile(fname_dice) and os.path.isfile(fname_time):
+
+            if len(open(fname_dice, 'r').read()):
+                res_dct['dice'].append(float(open(fname_dice, 'r').read().split('= ')[1].split('\n')[0]))
+            else:
+                fname_gt = path_data + s + '_seg.nii.gz'
+                fname_output = path_optic + s + '_seg.nii.gz'
+                os.system('sct_register_multimodal -i ' + fname_output + ' -d ' + fname_gt + ' -identity 1 -ofolder ' + path_optic)
+                fname_output_reg = fname_output.split('.nii.gz')[0] + '_src_reg.nii.gz'
+                os.system('sct_dice_coefficient -i ' + fname_output_reg + ' -d ' + fname_gt + ' -o ' + fname_dice)
+                if not len(open(fname_dice, 'r').read()):
+                    im_seg_gt = Image(fname_gt)
+                    im_seg = Image(fname_output_reg)
+                    im_seg_new = im_seg_gt.copy()
+                    im_seg_new.data = im_seg.data
+                    im_seg_new.setFileName(fname_output_reg)
+                    im_seg_new.absolutepath =  fname_output_reg
+                    im_seg_new.save()
+                    del im_seg_gt
+                    del im_seg
+                    os.system('sct_dice_coefficient -i ' + fname_output_reg + ' -d ' + fname_gt + ' -o ' + fname_dice)
+
+                res_dct['dice'].append(float(open(fname_dice, 'r').read().split('= ')[1].split('\n')[0]))
+
+            img = Image(path_img_cur)
+            nz_cur = img.dim[2]
+            del img
+            res_dct['time'].append(float(open(fname_time, 'r').read())/nz_cur)
+            
+            res_dct['subj_name'].append(s)
+            res_dct['algo'].append(algo_name)
+            res_dct['contrast'].append(cc)
+            patho_cur = info_pd[info_pd.subj_name==s].patho.values.tolist()[0]
+            if patho_cur != 'HC':
+                res_dct['patho'].append('patho')
+            else:
+                res_dct['patho'].append(patho_cur)
+
+    res_pd = pd.DataFrame.from_dict(res_dct)
+    print res_pd
+    print res_pd.dice.values.tolist()
+
+    return res_pd
 
 def panda_best_k(path_pkl, boostrap_k_pd, k_lst):
 
@@ -804,49 +1026,83 @@ def panda_best_k(path_pkl, boostrap_k_pd, k_lst):
 def panda_best_rot(path_pkl, boostrap_rot_pd, rot_lst):
 
     dct_tmp = {}
-
+    val_lst = []
     for r in rot_lst:
-        # idx_best = boostrap_rot_pd['mse_moy_'+r].idxmin()
-        idx_best = '069' if r == '1-0' else '052'
+        idx_best = boostrap_rot_pd['mse_moy_'+r].idxmin()
+        # idx_best = '069' if r == '1-0' else '052'
         dct_tmp['mse_'+str(r)] = []
         path_best = path_pkl + str(r) + '/' + str(idx_best).zfill(3) + '/'
         
         for val_pkl in os.listdir(path_best):
             if val_pkl.endswith('.pkl'):
-                with open(path_best+val_pkl) as outfile:    
-                    metrics = pickle.load(outfile)
-                    outfile.close()
-                dct_tmp['mse_'+str(r)].append(metrics['mse'])
-                if metrics['mse']>2.0:
-                    print val_pkl
+                if len(val_lst)<39:
+                    val_lst.append(val_pkl)
+                if val_pkl in val_lst and len(dct_tmp['mse_'+str(r)])<35:
+                    with open(path_best+val_pkl) as outfile:    
+                        metrics = pickle.load(outfile)
+                        outfile.close()
+                    print path_best+val_pkl
+                    dct_tmp['mse_'+str(r)].append(metrics['mse'])
+                    if metrics['mse']>2.0:
+                        print val_pkl
 
         print r
-        print idx_best
+        print path_best
     
+    for sss in dct_tmp:
+        print sss
+        print len(dct_tmp[sss])
     best_r_pd = pd.DataFrame.from_dict(dct_tmp)
-    print best_r_pd
+    # print best_r_pd
 
-    return best_r_pd
+    return best_r_pd, path_best
 
-def plot_boostrap_k(boostrap_pd, k_lst):
+def plot_boostrap_k(boostrap_pd, k_lst, cc):
 
     toplot_pd = boostrap_pd[k_lst]
     print toplot_pd
 
     if '60' in k_lst[0]:
-        x_min, x_max = 0.0, 6.0
-        y_min, y_max = 0.0, 30.0
+        if cc == 't2':
+            x_min, x_max = 0.0, 3.5
+            y_min, y_max = 0.0, 12.0
+        elif cc == 't2s':
+            x_min, x_max = 0.0, 8.5
+            y_min, y_max = 0.0, 17.0
+        elif cc == 'dmri':
+            x_min, x_max = 0.0, 9.5
+            y_min, y_max = 0.0, 17.0
+        else:
+            x_min, x_max = 0.0, 6.0
+            y_min, y_max = 0.0, 30.0
         color_h = 'red'
         nb_row, nb_col = 1, len(k_lst)
     elif '-' in k_lst[0]:
-        x_min, x_max = 0.0, 3.5
-        y_min, y_max = 0.0, 30.0
+        if cc == 't2':
+            x_min, x_max = 0.0, 6.0
+            y_min, y_max = 0.0, 16.0
+        elif cc == 't2s':
+            x_min, x_max = 0.0, 8.0
+            y_min, y_max = 0.0, 17.0
+        elif cc == 'dmri':
+            x_min, x_max = 0.0, 9.0
+            y_min, y_max = 0.0, 17.0
+        else:
+            x_min, x_max = 0.0, 3.5
+            y_min, y_max = 0.0, 30.0
         color_h = 'green'
-        # nb_row, nb_col = 2, 4
-        nb_row, nb_col = 1, len(k_lst)
+        nb_row, nb_col = 2, 4
+        # nb_row, nb_col = 1, len(k_lst)
     else:
-        x_min, x_max = 0.0, 2.0
-        y_min, y_max = 0.0, 7.0
+        if cc == 't1':
+            x_min, x_max = 0.0, 2.0
+            y_min, y_max = 0.0, 7.0
+        elif cc == 'dmri':
+            x_min, x_max = 0.0, 9.0
+            y_min, y_max = 0.0, 11.0     
+        else:
+            x_min, x_max = 0.0, 3.5
+            y_min, y_max = 0.0, 10.0
         color_h = 'blue'
         nb_row, nb_col = 1, len(k_lst)
 
@@ -1101,412 +1357,61 @@ def test_trainers_best(path_local, cc, mm, pp_ferg):
 # ******************************************************************************************
 
 
-def plot_comparison_clf(path_local, clf_lst, nbimg_cc_dct, folder_name):
+def plot_comparison_clf(pd_tot, cc_lst):
 
-    classifier_name_lst = clf_lst
-    path_output = path_local + 'plot_comparison/'
-    create_folders_local([path_output])
+    for clf in ['hough', 'optic']:
+        for mm_name in ['mse', 'zcoverage']:
 
-    fname_out_pkl = path_output + '_'.join(classifier_name_lst) + '.pkl'
+            pd_2plot = pd_tot[pd_tot.algo==clf]
 
-    dct_tmp = {'mse': [], 'zcoverage': [], 'resol': [], 'patho': [], 
-            'contrast': [], 'classifier': [], 'classifier_constrast': [], 'id': []}
-
-    for cc in nbimg_cc_dct:
-
-        nb_img = nbimg_cc_dct[cc]
-        path_pkl_sdika = path_local + 'output_pkl_' + cc + '/' + folder_name + '/0_' + str(nb_img).zfill(3) + '/res_'
-        if clf_lst[0] == 'Hough':
-            path_pkl_compare = path_local + 'propseg_pkl_' + cc + '/res_' + cc + '_'
-        else:
-            path_pkl_compare = path_local + 'output_pkl_' + cc + '/1111/0_111/res_'
-     
-        with open(path_local + 'dataset_lst_' + cc + '.pkl') as outfile:    
-          subj_lst = pickle.load(outfile)
-          outfile.close()
-
-        with open(path_local + 'test_valid_' + cc + '.pkl') as outfile:    
-          data_pd = pickle.load(outfile)
-          outfile.close()
-
-        valid_lst = data_pd[data_pd.valid_test == 'train']['subj_name'].values.tolist()
-
-        subj_lst = [t.split('.img')[0] for t in subj_lst]
-
-        for classifier_path, classifier_name in zip([path_pkl_compare, path_pkl_sdika], classifier_name_lst):
-            for subj in subj_lst:
-                fname_pkl_cur = classifier_path + subj + '.pkl'
-                if os.path.isfile(fname_pkl_cur) and not subj.split('_'+cc)[0] in valid_lst:
-                    with open(fname_pkl_cur) as outfile:    
-                        mm_cur = pickle.load(outfile)
-                        outfile.close()
-                    dct_tmp['id'].append(subj.split('_'+cc)[0])
-                    dct_tmp['classifier'].append(classifier_name)
-                    dct_tmp['resol'].append(data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['resol'].values.tolist()[0])
-                    dct_tmp['patho'].append(data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['patho'].values.tolist()[0])
-                    dct_tmp['classifier_constrast'].append(classifier_name+'_'+cc)
-                    dct_tmp['contrast'].append(cc)
-                    if mm_cur['zcoverage'] is None or mm_cur['zcoverage'] == 0.0:
-                        dct_tmp['zcoverage'].append(0.0)
-                        dct_tmp['mse'].append(None)
-                    else:
-                        dct_tmp['zcoverage'].append(mm_cur['zcoverage'])
-                        dct_tmp['mse'].append(mm_cur['mse'])
-                elif not subj.split('_'+cc)[0] in valid_lst and not classifier_name=='OptiC':
-                    dct_tmp['zcoverage'].append(0.0)
-                    dct_tmp['mse'].append(None)
-                    dct_tmp['id'].append(subj.split('_'+cc)[0])
-                    dct_tmp['classifier'].append(classifier_name)
-                    dct_tmp['resol'].append(data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['resol'].values.tolist()[0])
-                    dct_tmp['patho'].append(data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['patho'].values.tolist()[0])
-                    dct_tmp['classifier_constrast'].append(classifier_name+'_'+cc)
-                    dct_tmp['contrast'].append(cc)
-
-    pd_2plot = pd.DataFrame.from_dict(dct_tmp)
-
-    order_lst = []
-    for clf_nn in clf_lst:
-        for contr in ['t2', 't1', 't2s']:
-            order_lst.append(clf_nn+'_'+contr)
-
-    for mm_name in ['mse', 'zcoverage']:
-        print '*****' + mm_name
-
-        if mm_name != 'zcoverage':
-            y_lim_min, y_lim_max = 0.01, 30
-        else:
-            y_lim_min, y_lim_max = 0, 101
-
-        sns.set(style="whitegrid", palette="Set1", font_scale=1.3)
-        palette_swarm = dict(ok = (0.2,0.2,0.2), no = 'firebrick')
-        fig, axes = plt.subplots(1, 1, sharey='col', figsize=(24, 8))
-        fig.subplots_adjust(left=0.05, bottom=0.05)
-        if clf_lst[0] == 'Hough':
-            color_dct = dict(Hough = 'darkorange', OptiC = 'c')
-            palette_violon = dict(Hough_t2='gold', Hough_t1='royalblue', Hough_t2s='mediumvioletred', 
-                          OptiC_t2='khaki', OptiC_t1='cornflowerblue', OptiC_t2s='pink')
-        else:
-            color_dct = dict(SVM = 'darkorange', OptiC = 'c')
-            palette_violon = dict(SVM_t2='gold', SVM_t1='royalblue', SVM_t2s='mediumvioletred', 
-                          OptiC_t2='khaki', OptiC_t1='cornflowerblue', OptiC_t2s='pink')
-        a = plt.subplot(1, 1, 1)
-        sns.violinplot(x='classifier_constrast', y=mm_name, data=pd_2plot, order=order_lst,
-                              inner="quartile", cut=0, scale="count",
-                              sharey=True,  palette=palette_violon)
-
-        a_swarm = sns.swarmplot(x='classifier_constrast', y=mm_name, data=pd_2plot, 
-                                order=order_lst, size=3,
-                                color=(0.2,0.2,0.2))
-        # a_swarm.legend_.remove()
-
-        a.set_ylim([y_lim_min,y_lim_max])
-        plt.yticks(size=30)
-        a.set_ylabel('')    
-        a.set_xlabel('')
-
-        # plt.show()
-        fig.tight_layout()
-        fig.savefig(path_output + '_'.join(classifier_name_lst) + '_' + mm_name + '.png')
-        plt.close()
-
-
-        val_tot_ttest = [[],[]]
-        for cccc in ['t2', 't1', 't2s']:
-            val_ttest = []
-            ziii = 0
-            for ccllff in clf_lst:
-                print '\n\n' + cccc + ' ' + ccllff
-                values = pd_2plot[(pd_2plot.classifier_constrast==ccllff+'_'+cccc)][mm_name].values.tolist()
-                values = [v for v in values if str(v)!='nan']
-
-                stg = '\nMean: ' + str(round(np.mean(values),2))
-                stg += '\nStd: ' + str(round(np.std(values),2))
-
-                if mm_name != 'zcoverage':
-                    stg += '\nMax: ' + str(round(np.max(values),2))
-                else:
-                    stg += '\nMin: ' + str(round(np.min(values),2))
-
-                print stg
-                print len(values)
-                val_ttest.append(values)
-                for vvv in values:
-                    val_tot_ttest[ziii].append(vvv)
-                ziii+=1
-            print ttest_ind(val_ttest[0], val_ttest[1])[1]
-
-        print ttest_ind(val_tot_ttest[0], val_tot_ttest[1])[1]
-
-
-
-def plot_comparison_clf_patho(path_local, clf_lst, nbimg_cc_dct, folder_name):
-
-    classifier_name_lst = clf_lst
-    path_output = path_local + 'plot_comparison/'
-    create_folders_local([path_output])
-
-    dct_tmp = {'mse': [], 'zcoverage': [], 'resol': [], 'patho': [], 
-            'contrast': [], 'classifier': [], 'classifier_patho': [], 'id': []}
-
-    for cc in nbimg_cc_dct:
-
-        nb_img = nbimg_cc_dct[cc]
-        path_pkl_sdika = path_local + 'output_pkl_' + cc + '/' + folder_name + '/0_' + str(nb_img).zfill(3) + '/res_'
-        if clf_lst[0] == 'Hough':
-            path_pkl_compare = path_local + 'propseg_pkl_' + cc + '/res_' + cc + '_'
-        else:
-            path_pkl_compare = path_local + 'output_pkl_' + cc + '/1111/0_111/res_'
-     
-        with open(path_local + 'dataset_lst_' + cc + '.pkl') as outfile:    
-          subj_lst = pickle.load(outfile)
-          outfile.close()
-
-        with open(path_local + 'test_valid_' + cc + '.pkl') as outfile:    
-          data_pd = pickle.load(outfile)
-          outfile.close()
-
-        with open(path_local + 'patho_dct_' + cc + '.pkl') as outfile:    
-          patho_dct = pickle.load(outfile)
-          outfile.close()
-
-        valid_lst = data_pd[data_pd.valid_test == 'train']['subj_name'].values.tolist()
-
-        subj_lst = [t.split('.img')[0] for t in subj_lst]
-
-        for classifier_path, classifier_name in zip([path_pkl_compare, path_pkl_sdika], classifier_name_lst):
-            for subj in subj_lst:
-                fname_pkl_cur = classifier_path + subj + '.pkl'
-                if os.path.isfile(fname_pkl_cur) and not subj.split('_'+cc)[0] in valid_lst:
-                    with open(fname_pkl_cur) as outfile:    
-                        mm_cur = pickle.load(outfile)
-                        outfile.close()
-                    dct_tmp['id'].append(subj.split('_'+cc)[0])
-                    dct_tmp['classifier'].append(classifier_name)
-                    dct_tmp['resol'].append(data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['resol'].values.tolist()[0])
-                    hc_patient = data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['patho'].values.tolist()[0]
-                    if hc_patient == 'patient':
-                        for disease in patho_dct: 
-                            if subj.split('_'+cc)[0] in patho_dct[disease]:
-                                if str(disease)=='MS':
-                                    dct_tmp['patho'].append('MS')
-                                elif str(disease)=='CSM':
-                                    dct_tmp['patho'].append('DCM')
-                                else:
-                                    dct_tmp['patho'].append('other')
-
-                        if len(dct_tmp['patho']) != len(dct_tmp['resol']):
-                            if '_MS_' in subj.split('_'+cc)[0]:
-                                dct_tmp['patho'].append('MS')
-                            elif 'sct_' in subj.split('_'+cc)[0] or '20150910_joshua' in subj.split('_'+cc)[0]:
-                                dct_tmp['patho'].append('hc')                            
-                            else:
-                                dct_tmp['patho'].append(hc_patient)
-                    else:
-                        dct_tmp['patho'].append(hc_patient)
-                    dct_tmp['classifier_patho'].append(classifier_name+'_'+hc_patient)
-                    dct_tmp['contrast'].append(cc)
-                    if mm_cur['zcoverage'] is None or mm_cur['zcoverage'] == 0.0:
-                        dct_tmp['zcoverage'].append(0.0)
-                        dct_tmp['mse'].append(None)
-                    else:
-                        dct_tmp['zcoverage'].append(mm_cur['zcoverage'])
-                        dct_tmp['mse'].append(mm_cur['mse'])
-                elif not subj.split('_'+cc)[0] in valid_lst and not classifier_name=='OptiC':
-                    dct_tmp['zcoverage'].append(0.0)
-                    dct_tmp['mse'].append(None)
-                    dct_tmp['id'].append(subj.split('_'+cc)[0])
-                    dct_tmp['classifier'].append(classifier_name)
-                    dct_tmp['resol'].append(data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['resol'].values.tolist()[0])
-                    hc_patient = data_pd[(data_pd.subj_name == subj.split('_'+cc)[0])]['patho'].values.tolist()[0]
-                    if hc_patient == 'patient':
-                        for disease in patho_dct: 
-                            if subj.split('_'+cc)[0] in patho_dct[disease]:
-                                if str(disease)=='MS':
-                                    dct_tmp['patho'].append('MS')
-                                elif str(disease)=='CSM':
-                                    dct_tmp['patho'].append('DCM')
-                                else:
-                                    dct_tmp['patho'].append('other')
-
-                        if len(dct_tmp['patho']) != len(dct_tmp['resol']):
-                            if '_MS_' in subj.split('_'+cc)[0]:
-                                dct_tmp['patho'].append('MS')
-                            elif 'sct_' in subj.split('_'+cc)[0] or '20150910_joshua' in subj.split('_'+cc)[0]:
-                                dct_tmp['patho'].append('hc')                            
-                            else:
-                                dct_tmp['patho'].append(hc_patient)
-                    else:
-                        dct_tmp['patho'].append(hc_patient)
-                    dct_tmp['classifier_patho'].append(classifier_name+'_'+hc_patient)
-                    dct_tmp['contrast'].append(cc)
-
-    pd_res = pd.DataFrame.from_dict(dct_tmp)
-
-    def make_stg(d):
-        stg = 'Mean = ' + str(round(np.mean(d),2))
-        stg += '\nStd = ' + str(round(np.std(d),2))
-        return stg
-
-    for m in ['zcoverage', 'mse']:
-        print '\n\nMetric: ' + m
-
-        for p in ['patient', 'hc']:
-            if p == 'patient':
-                print m
-                data_patho_compare = pd_res[(pd_res.patho!='hc') & (pd_res.classifier==clf_lst[0])][m].values.tolist()
-                print len(data_patho_compare)
-                data_patho_compare = [d for d in data_patho_compare if str(d) != 'nan']
-                print len(data_patho_compare)
-                data_patho_optic = pd_res[(pd_res.patho!='hc') & (pd_res.classifier==clf_lst[1])][m].values.tolist()        
+            if mm_name != 'zcoverage':
+                y_lim_min, y_lim_max = -1, 50
             else:
-                data_patho_compare = pd_res[(pd_res.patho=='hc') & (pd_res.classifier==clf_lst[0])][m].values.tolist()
-                data_patho_compare = [d for d in data_patho_compare if str(d) != 'nan']
-                data_patho_optic = pd_res[(pd_res.patho=='hc') & (pd_res.classifier==clf_lst[1])][m].values.tolist()
+                y_lim_min, y_lim_max = -1, 101
 
-            print '... for ' + p + ' (n_compare=' + str(len(data_patho_compare)) + ', n_optic=' + str(len(data_patho_optic)) + ')'
-            print '... ... Mean_Compare = '+str(round(np.mean(data_patho_compare),2))
-            print '... ... Mean_OptiC = '+str(round(np.mean(data_patho_optic),2))
-            print '... ... Std_Compare = '+str(round(np.std(data_patho_compare),2))
-            print '... ... Std_OptiC = '+str(round(np.std(data_patho_optic),2))
-            print '... ... min_Compare = '+str(round(np.min(data_patho_compare),2))
-            print '... ... min_OptiC = '+str(round(np.min(data_patho_optic),2))
-            print '... ... max_Compare = '+str(round(np.max(data_patho_compare),2))
-            print '... ... max_OptiC = '+str(round(np.max(data_patho_optic),2))
-            print '... ... t-test p-value = '+str(ttest_ind(data_patho_optic, data_patho_compare)[1])
+            sns.set(style="whitegrid", palette="Set1", font_scale=1.3)
 
-        # if m == 'zcoverage':
-        #     y_lim_min, y_lim_max = 0, 101
-        #     y_stg_loc = y_lim_min + 25
-        # else:
-        #     y_lim_min, y_lim_max = 0, 25
-        #     y_stg_loc = y_lim_min + 20
+            fig, axes = plt.subplots(1, 1, sharey='col', figsize=(32, 16))
+            fig.subplots_adjust(left=0.05, bottom=0.05)
 
-        # order_lst = []
-        # for clf_nn in clf_lst:
-        #     for pppp in ['hc', 'patient']:
-        #         order_lst.append(clf_nn+'_'+pppp)
+            palette_violon = dict(t2='navajowhite', t1='skyblue', t2s='mediumaquamarine', dmri='lightpink')
+            palette_swarm = dict(HC = 'royalblue', patho = 'firebrick')
 
-        # sns.set(style="whitegrid", palette="Set1", font_scale=1.3)
-        # palette_swarm = dict(MS = 'forestgreen', DCM = 'darkblue', other='m', hc=(0.2,0.2,0.2))
-        # if clf_lst[0] == 'Hough':
-        #     palette_violon = dict(Hough_hc='orange', Hough_patient='c',  
-        #                           OptiC_hc='peachpuff', OptiC_patient='paleturquoise')
-        # else:
-        #     palette_violon = dict(SVM_hc='orange', SVM_patient='c',  
-        #                           OptiC_hc='peachpuff', OptiC_patient='paleturquoise')           
-        # fig, axes = plt.subplots(1, 1, sharey='col', figsize=(16, 8))
-        # fig.subplots_adjust(left=0.05, bottom=0.05)
+            a = plt.subplot(1, 1, 1)
+            sns.violinplot(x='contrast', y=mm_name, data=pd_2plot, order=cc_lst,
+                                  inner=None, cut=0, scale="count",
+                                  sharey=True,  palette=palette_violon, bw=0.15)
 
-        # a = plt.subplot(1, 1, 1)
-        # sns.violinplot(x='classifier_patho', y=m, data=pd_res, order=order_lst,
-        #                         inner="quartile", cut=0, scale="count",
-        #                         sharey=True,  palette=palette_violon)
+            a_swarm = sns.swarmplot(x='contrast', y=mm_name, data=pd_2plot, order=cc_lst, hue='patho',
+                                    size=6, palette=palette_swarm)
 
-        # a_swarm = sns.swarmplot(x='classifier_patho', y=m, data=pd_res, 
-        #                           order=order_lst, size=3,
-        #                           hue='patho', palette=palette_swarm)
-        # a_swarm.legend_.remove()
-        # a.set_ylabel('')
-        # a.set_xlabel('')
-        # a.set_ylim([y_lim_min,y_lim_max])
-        # plt.yticks(size=30)
+            a_swarm.legend_.remove()
 
-        # plt.show()
-        # fig.tight_layout()
-        # fig.savefig(path_output + 'patho_' + '_'.join(classifier_name_lst) + '_' + m + '.png')
-        # plt.close()
+            a.set_ylim([y_lim_min,y_lim_max])
+            plt.yticks(size=30)
+            a.set_ylabel('')    
+            a.set_xlabel('')
 
-def prepare_svmhog(path_local, cc, pp_ferg, nb_img):
+            plt.show()
+            fig.tight_layout()
+            plt.close()
 
-    with open(path_local + 'test_valid_' + cc + '.pkl') as outfile:    
-        data_pd = pickle.load(outfile)
-        outfile.close()
-
-    valid_lst = data_pd[data_pd.valid_test == 'train']['subj_name'].values.tolist()
-    test_lst = data_pd[data_pd.valid_test == 'test']['subj_name'].values.tolist()
-
-    with open(path_local + 'dataset_lst_' + cc + '.pkl') as outfile:    
-        data_dct = pickle.load(outfile)
-        outfile.close()
-
-    valid_data_lst, test_data_lst = [], []
-
-    for dd in data_dct:
-        ok_bool = 0
-        for tt in test_lst:
-          if tt in dd and not ok_bool:
-            test_data_lst.append(dd)
-            ok_bool = 1
-        for vv in valid_lst:
-          if vv in dd and not ok_bool:
-            valid_data_lst.append(dd)
-            ok_bool = 1
-
-    path_local_train = path_local + 'input_train_' + cc + '_'+ str(nb_img) + '/'
-    print valid_data_lst
-    send_data2ferguson(path_local, pp_ferg, cc, 1, valid_data_lst, path_local_train, True)
-
-def prepare_svmhog_test(path_local, cc, pp_ferg, mm):
-
-    path_folder_pkl = path_local + 'output_pkl_' + cc + '/111/'
-    file_cur = path_local + 'output_pkl_' + cc + '/111.pkl'
-    if os.path.isfile(file_cur):
-
-        with open(file_cur) as outfile:    
-            data_pd = pickle.load(outfile)
-            outfile.close()
-
-        if len(data_pd[data_pd[mm+'_med']==find_id_extr_df(data_pd, mm+'_med')[0]]['id'].values.tolist())>1:
-            mm_avg = mm + '_moy'
-        else:
-            mm_avg = mm + '_med'
-
-        fold_best = find_id_extr_df(data_pd, mm_avg)[1]
-
-    path_input_train_old = path_local + 'input_train_' + cc + '_1/'
-
-    path_input_train = path_local + 'input_train_' + cc + '_111/'
-    path_input_train_best = path_input_train + '000/'
-    create_folders_local([path_input_train, path_input_train_best])
-
-    for fold in os.listdir(path_input_train_old):
-        if os.path.isfile(path_input_train_old + fold + '/' + str(fold_best).zfill(3) + '.txt'):
-            file_in = path_input_train_old + fold + '/' + str(fold_best).zfill(3) + '.txt'
-            file_seg_in = path_input_train_old + fold + '/' + str(fold_best).zfill(3) + '_ctr.txt'
-            print file_in, file_seg_in
-            file_out = path_input_train_best + '0_' + str(111).zfill(3) + '.txt'
-            file_seg_out = path_input_train_best + '0_' + str(111).zfill(3) + '_ctr.txt'        
-            print file_out, file_seg_out
-            shutil.copyfile(file_in, file_out)
-            shutil.copyfile(file_seg_in, file_seg_out)
-
-
-
-    with open(path_local + 'test_valid_' + cc + '.pkl') as outfile:    
-        data_pd = pickle.load(outfile)
-        outfile.close()
-
-    valid_lst = data_pd[data_pd.valid_test == 'train']['subj_name'].values.tolist()
-    test_lst = data_pd[data_pd.valid_test == 'test']['subj_name'].values.tolist()
-
-    with open(path_local + 'dataset_lst_' + cc + '.pkl') as outfile:    
-        data_dct = pickle.load(outfile)
-        outfile.close()
-
-    valid_data_lst, test_data_lst = [], []
-    for dd in data_dct:
-        ok_bool = 0
-        for tt in test_lst:
-            if tt in dd and not ok_bool:
-                test_data_lst.append(dd)
-                ok_bool = 1
-        for vv in valid_lst:
-            if vv in dd and not ok_bool:
-                valid_data_lst.append(dd)
-                ok_bool = 1
-
-    send_data2ferguson(path_local, pp_ferg, cc, 111, test_data_lst, path_input_train, True)
-
+            
+            for cc in cc_lst:
+                print '***** ' + clf + '_' + mm_name + '_' + cc + ' *****'
+                pd_2mean = pd_2plot[pd_2plot.contrast==cc]
+                values = pd_2mean[mm_name].values.tolist()
+                values = [v for v in values if str(v)!='nan']
+                print 'Mean:' + str(round(np.mean(values),2))
+                print 'Std:' + str(round(np.std(values),2))
+                values_hc = pd_2mean[pd_2mean.patho=='HC'][mm_name].values.tolist()
+                values_hc = [v for v in values_hc if str(v)!='nan']
+                print 'Mean_HC:' + str(round(np.mean(values_hc),2))
+                print 'Std_HC:' + str(round(np.std(values_hc),2))
+                values_patho = pd_2mean[pd_2mean.patho=='patho'][mm_name].values.tolist()
+                values_patho = [v for v in values_patho if str(v)!='nan']
+                print 'Mean_patho:' + str(round(np.mean(values_patho),2))
+                print 'Std_patho:' + str(round(np.std(values_patho),2))
 
 def compute_dice(path_local, nb_img=1):
 
@@ -1662,49 +1567,255 @@ def compute_dice(path_local, nb_img=1):
     # fig.savefig(path_local + 'plot_comparison/propseg_dice.png')
     # plt.close()
 
-def computation_time(path_local, cc):
+def computation_time_optic_dyn(path_optic, path_dyn, data_pd, path_data):
 
-    path_time = path_local + 'output_time_' + cc + '_11/'
-    path_dim = path_time+'dim.pkl'
+    time_optic_lst, time_dyn_lst = [], []
+    subj_lst = data_pd.subj_name.values.tolist()
+    for s in subj_lst:
+        path_img_cur = path_data+s+'.nii.gz'
+        img = Image(path_img_cur)
+        nz_cur = img.dim[2]
+        del img
 
-    if not os.path.isfile(path_dim):
-        with open(path_local + 'dataset_lst_' + cc + '.pkl') as outfile:    
-            subj_lst = pickle.load(outfile)
+        path_optic_cur = path_optic+s+'_time.txt'
+        path_dyn_cur = path_dyn+s+'_time.txt'
+        if os.path.isfile(path_optic_cur) and os.path.isfile(path_dyn_cur):
+            time_optic_lst.append(float(open(path_optic_cur, 'r').read())/nz_cur)
+            time_dyn_lst.append(float(open(path_dyn_cur, 'r').read())/nz_cur)
+
+    return time_optic_lst, time_dyn_lst
+
+
+def data_stats():
+
+
+    c_dct = {'t2': 0.0, 't2s': 0.0, 't1': 0.0, 'dmri': 0.0}
+    center_dct = {}
+    patho_dct = {}
+    resol_dct = {'iso': {'nb': 0, 'in_plane': [], 'thick': []},
+                    'sag': {'nb': 0, 'in_plane': [], 'thick': []},
+                    'ax': {'nb': 0, 'in_plane': [], 'thick': []}}
+
+    for c in ['t2', 't2s', 't1', 'dmri']:
+        with open(path_local_sdika + 'info_' + c + '.pkl') as outfile:    
+            data_pd = pickle.load(outfile)
             outfile.close()
+    # # #     path_lst = [path_local_sdika + 'input_nii/' + c + '/' + s + '.nii.gz' for s in data_pd.subj_name.values.tolist()]
+    # # #     resol_dct_cur = info_resol(path_lst)
+    # # #     for r in resol_dct:
+    # # #         if 'nb' in resol_dct_cur[r]:
+    # # #             resol_dct[r]['nb'] += resol_dct_cur[r]['nb']
+    # # #         if 'in_plane' in resol_dct[r] and 'in_plane' in resol_dct_cur[r]:
+    # # #             for rr in resol_dct_cur[r]['in_plane']:
+    # # #                 resol_dct[r]['in_plane'].append(rr)
+    # # #         if 'thick' in resol_dct[r] and 'thick' in resol_dct_cur[r]:
+    # # #             for rr in resol_dct_cur[r]['thick']:
+    # # #                 resol_dct[r]['thick'].append(rr)
 
-        dct_dim = {'id': [], 'nz': []}
-        for ii in subj_lst:
-            img = Image(path_local + 'input_nii_' + cc + '/' + ii.split('.img')[0] + '.nii.gz')
-            dct_dim['id'].append(ii.split('.img')[0])
-            dct_dim['nz'].append(img.dim[2])
-            del img
+        c_dct[c] += len(data_pd['center'].values.tolist())
+        center_lst_cur = data_pd['center'].values.tolist()
+        for cc in np.unique(center_lst_cur):
+            if cc not in center_dct:
+                center_dct[cc] = []
+            s_lst = data_pd[data_pd.center==cc]
+            s_lst = [s.split('_'+c)[0] for s in s_lst.subj_name.values.tolist()]
 
-        dim_pd = pd.DataFrame.from_dict(dct_dim)
-        dim_pd.to_pickle(path_time+'dim.pkl')
-    else:
-        with open(path_dim) as outfile:    
-            dim_pd = pickle.load(outfile)
-            outfile.close()
+            for s in s_lst:
+                if not s in center_dct[cc]:
+                    center_dct[cc].append(s)
 
-    dct_dim = dim_pd.to_dict(orient='list')
+        path_lst_cur = data_pd['patho'].values.tolist()
+        for p in np.unique(path_lst_cur):
+            if p not in patho_dct:
+                patho_dct[p] = []
+            s_lst = data_pd[data_pd.patho==p]
+            s_lst = [s.split('_'+c)[0] for s in s_lst.subj_name.values.tolist()]
 
-    dct_tmp = {'nb_train': [], 'mean': [], 'std': []}
-    for fold_nb in os.listdir(path_time):
-        if os.path.isdir(path_time+fold_nb):
-            dct_tmp['nb_train'].append(fold_nb.split('0_0')[1])
-            mean_per_slice_lst = []
-            for subj, nz in zip(dct_dim['id'], dct_dim['nz']):
-                time_file = path_time+fold_nb+'/'+subj+'.txt'
-                if os.path.isfile(time_file):
-                    tps_img = float(open(time_file, 'r').read())
-                    mean_per_slice_lst.append(tps_img/nz)
-                    dct_tmp['mean'].append(np.mean(mean_per_slice_lst))
-                    dct_tmp['std'].append(np.std(mean_per_slice_lst))
+            for s in s_lst:
+                if not s in patho_dct[p]:
+                    patho_dct[p].append(s)
 
-    print dct_tmp
-    time_pd = pd.DataFrame.from_dict(dct_tmp)
-    print time_pd
-    time_pd.to_pickle(path_time+'time.pkl')
+
+    # with open(path_local_sdika + 'resOl_tmp.pkl', 'wb') as f:
+    #     pickle.dump(resol_dct, f)
+    #     f.close()
+    # print resol_dct
+
+    
+
+    keys_lst = center_dct.keys()
+    print keys_lst
+    for k in center_dct.keys():
+        print '\n' + str(k) + ' : ' + str(len(center_dct[k]))
+    print '\nContrast dct:'
+    print c_dct
+    print '\nNb of image: ' + str(sum([c_dct[cc] for cc in c_dct]))
+    for p in patho_dct:
+        print '\n' + p + ' : ' + str(len(patho_dct[p]))
+    print patho_dct['unknown']
+    print '\nNb of subj: ' + str(sum([len(patho_dct[p]) for p in patho_dct]))
+
+    with open(path_local_sdika + 'resOl_tmp.pkl') as outfile:    
+        resol_dct = pickle.load(outfile)
+        outfile.close()
+    for r in resol_dct:
+        print '\n' + r + ' : ' + str(resol_dct[r]['nb'])
+
+
+
+    # order_lst = ['in_plane']
+    # dct_cur = {'orient': [], 'in_plane': []}
+    # for r in resol_dct:
+    #     for i in resol_dct[r]['in_plane']:
+    #         dct_cur['in_plane'].append(i)
+    #         dct_cur['orient'].append('in_plane')
+
+
+    
+    # cmpt_dct = dict(Counter(dct_cur['in_plane']))
+    # keys_lst = np.unique(dct_cur['in_plane'])
+    # for k in keys_lst:
+    #     print '\n' + str(k) + ' : ' + str(cmpt_dct[k])
+
+
+    # pd_res = pd.DataFrame.from_dict(dct_cur)
+    # # print pd_res
+    # sns.set(style="whitegrid", font_scale=1.3)
+    # palette_violon = dict(in_plane='skyblue')           
+    # fig, axes = plt.subplots(1, 1, sharey='col', figsize=(8, 8))
+    # fig.subplots_adjust(left=0.05, bottom=0.05)
+    # a = plt.subplot(1, 1, 1)
+    # sns.violinplot(x='orient', y='in_plane', data=pd_res, order=order_lst,
+    #                         inner=None, cut=0, scale="count",
+    #                         sharey=True,  palette=palette_violon, bw=0.15)
+    # # sns.swarmplot(x='orient', y='in_plane', data=pd_res, order=order_lst, size=3,
+    # #                     color=(0.2,0.2,0.2))
+    # a.set_ylabel('')
+    # a.set_xlabel('')
+    # plt.yticks(size=16)
+    # plt.show()
+    # # fig.tight_layout()
+    # plt.close()
+
+
+
+    # order_lst = ['thick']
+    # dct_cur = {'orient': [], 'thick': []}
+    # for r in resol_dct:
+    #     for i in resol_dct[r]['thick']:
+    #         dct_cur['thick'].append(i)
+    #         dct_cur['orient'].append('thick')
+
+    # cmpt_dct = dict(Counter(dct_cur['thick']))
+    # keys_lst = np.unique(dct_cur['thick'])
+    # for k in keys_lst:
+    #     print '\n' + str(k) + ' : ' + str(cmpt_dct[k])
+
+    # pd_res = pd.DataFrame.from_dict(dct_cur)
+    # # print pd_res
+    # sns.set(style="whitegrid", font_scale=1.3)
+    # palette_violon = dict(thick='plum')           
+    # fig, axes = plt.subplots(1, 1, sharey='col', figsize=(8, 8))
+    # fig.subplots_adjust(left=0.05, bottom=0.05)
+    # a = plt.subplot(1, 1, 1)
+    # sns.violinplot(x='orient', y='thick', data=pd_res, order=order_lst,
+    #                         inner=None, cut=0, scale="count",
+    #                         sharey=True,  palette=palette_violon, bw=0.15)
+    # # sns.swarmplot(x='orient', y='thick', data=pd_res, order=order_lst, size=2.5,
+    # #                     color=(0.2,0.2,0.2))
+    # a.set_ylabel('')
+    # a.set_xlabel('')
+    # plt.yticks(size=16)
+    # plt.show()
+    # # fig.tight_layout()
+    # plt.close()
+
+    # print '\n\n'
+    # print 'ALPHA PLOT'
+    # print '\n\n'
+
+
+def prediction_propseg(path_local, cc, testing_lst):
+
+    path_nii = path_local + 'input_nii/' + cc + '/'
+    path_output_nii_propseg = path_local + 'propseg_nii/' + cc + '/'
+    path_gt = path_local + 'gold/' + cc + '/'
+    create_folders_local([path_output_nii_propseg])
+
+    if cc == 't2s':
+        cc = 't2'
+    elif cc == 'dmri':
+        cc = 't1'
+
+    path_nii2convert_lst = []
+    for subject_name in testing_lst:
+        fname_input = path_nii + subject_name + '.nii.gz'
+        fname_output = path_output_nii_propseg + subject_name + '_centerline_pred.nii.gz'
+        fname_gt = path_nii + subject_name + '_seg.nii.gz'
+        if not os.path.isfile(fname_output):
+
+            start = time.time()
+            os.system('sct_propseg -i ' + fname_input + ' -c ' + cc + ' -ofolder ' + path_output_nii_propseg + ' -centerline-binary')
+            end = time.time()
+            with open(path_output_nii_propseg + subject_name + '_time.txt', 'w') as text_file:
+                text_file.write(str(end-start))
+                text_file.close()
+
+            fname_seg = path_output_nii_propseg + subject_name + '_seg.nii.gz'
+            if os.path.isfile(fname_seg):
+                os.rename(path_output_nii_propseg + subject_name + '_centerline.nii.gz', fname_output)
+            else:
+                im_data = Image(fname_input)
+                im_pred = im_data.copy()
+                im_pred.data *= 0
+                im_pred.setFileName(fname_output)
+                im_pred.save()
+
+            os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
+        
+        fname_dice = path_output_nii_propseg + subject_name + '_dice.txt'
+        if not os.path.isfile(fname_dice):
+            fname_seg = path_output_nii_propseg + subject_name + '_seg.nii.gz'
+            if not os.path.isfile(fname_seg):
+                im_data = Image(fname_input)
+                im_pred = im_data.copy()
+                im_pred.data *= 0
+                im_pred.setFileName(fname_seg)
+                im_pred.save()
+            os.system('sct_dice_coefficient -i ' + fname_gt + ' -d ' + fname_seg + ' -o ' + fname_dice)
+
+
+
+def prediction_propseg_optic(path_local, cc, testing_lst, path_ctr):
+
+    path_nii = path_local + 'input_nii/' + cc + '/'
+    path_gt = path_local + 'gold/' + cc + '/'
+    path_output_nii_propseg = path_local + 'propseg_optic_nii/' + cc + '/'
+    create_folders_local([path_output_nii_propseg])
+
+    if cc == 't2s':
+        cc = 't2'
+    elif cc == 'dmri':
+        cc = 't1'
+
+    path_nii2convert_lst = []
+    for subject_name in testing_lst:
+        fname_input = path_nii + subject_name + '.nii.gz'
+        fname_ctr = path_ctr + subject_name + '_centerline_pred.nii.gz'
+        fname_output = path_output_nii_propseg + subject_name + '_seg.nii.gz'
+        fname_dice = path_output_nii_propseg + subject_name + '_dice.txt'
+        fname_gt = path_nii + subject_name + '_seg.nii.gz'
+        if not os.path.isfile(fname_output) and os.path.isfile(fname_ctr):
+            start = time.time()
+            os.system('sct_propseg -i ' + fname_input + ' -c ' + cc + ' -ofolder ' + path_output_nii_propseg + ' -init-centerline ' + fname_ctr)
+            end = time.time()
+            with open(path_output_nii_propseg + subject_name + '_time.txt', 'w') as text_file:
+                text_file.write(str(end-start))
+                text_file.close()
+            os.remove(path_output_nii_propseg + subject_name + '_centerline.nii.gz')
+            os.system('sct_image -i ' + fname_output + ' -setorient RPI -o ' + fname_output)
+            os.system('sct_dice_coefficient -i ' + fname_gt + ' -d ' + fname_output + ' -o ' + fname_dice)
+
 
 # ******************************************************************************************
 
@@ -1749,7 +1860,8 @@ if __name__ == '__main__':
         fname_local_script_rot = '/Users/chgroc/spinalcordtoolbox/dev/sct_detect_spinalcord_sdika_ferguson_rot.py'
         fname_local_script_lambda = '/Users/chgroc/spinalcordtoolbox/dev/sct_detect_spinalcord_sdika_ferguson_lambda.py'
         fname_local_script_test = '/Users/chgroc/spinalcordtoolbox/dev/sct_detect_spinalcord_sdika_ferguson_test.py'        
-        path_ferguson = '/home/neuropoly/code/spine-ms-tmi/'
+        fname_local_script_testing = '/Users/chgroc/spinalcordtoolbox/dev/sct_detect_spinalcord_sdika_ferguson_testing.py'        
+        path_ferguson = '/home/neuropoly/code/spine-ms-tmi-dwi/'
         path_sct_testing_large = '/Volumes/Public_JCA/sct_testing/large/'
 
         # Format of parser arguments
@@ -1770,12 +1882,14 @@ if __name__ == '__main__':
                                   path_local_sdika+'input_img/'+contrast_of_interest+'/',
                                   path_local_sdika+'input_nii/'+contrast_of_interest+'/'])
             
-            if not os.path.isfile(path_local_sdika + 'info_' + contrast_of_interest + '.pkl'):
-                panda_dataset(path_local_sdika, contrast_of_interest, path_sct_testing_large, 40)
+            # if not os.path.isfile(path_local_sdika + 'info_' + contrast_of_interest + '.pkl'):
+            panda_dataset(path_local_sdika, contrast_of_interest, path_sct_testing_large, 40)
             prepare_dataset(path_local_sdika, contrast_of_interest, path_sct_testing_large)
 
-            os.system('scp ' + fname_local_script + ' ferguson:' + path_ferguson)
-            # os.system('scp -r ' + path_local_sdika+'input_img/' + ' ferguson:' + path_ferguson)
+            # os.system('scp ' + fname_local_script + ' ferguson:' + path_ferguson)
+            # os.system('scp -r ' + path_local_sdika+'input_img' + ' ferguson:' + path_ferguson)
+
+
 
         # Train k-Boostrap
         elif step == 1:
@@ -1794,15 +1908,7 @@ if __name__ == '__main__':
               create_folders_local([path_local_sdika+'output_nii/'+contrast_of_interest+'/'+str(k)+'/', 
                                     path_local_sdika+'output_pkl/'+contrast_of_interest+'/'+str(k)+'/',
                                     path_local_sdika+'input_train/'+contrast_of_interest+'/'+contrast_of_interest+'_'+str(k)+'/'])
-            #
-            #
-            #
-            #
-            # !!! Modif _val !!! + code ferguson
-            #
-            #
-            #
-            #
+
             prepare_train(path_local_sdika, path_ferguson, contrast_of_interest, list_k, 100)
 
         # Train k
@@ -1834,27 +1940,17 @@ if __name__ == '__main__':
             boostrap_k_pd = panda_boostrap_k(path_folder_pkl, list_k)
             best_k_pd = panda_best_k(path_folder_pkl, boostrap_k_pd, list_k)
             col_names = ['mse_'+str(k) for k in list_k]
-            plot_boostrap_k(best_k_pd, col_names)
+            # plot_boostrap_k(best_k_pd, col_names, contrast_of_interest)
 
-            print '\nThe ANOVA test has important assumptions that must be satisfied:'
-            print 'in order for the associated p-value to be valid.'
-            print '\n1/ The samples are independent'
-            print '\n2/ Each sample is from a normally distributed population:'
-            print 'Normal Test p-values:'
-
-            for k in col_names:
-                print k
-                print normaltest(best_k_pd[k].values.tolist())[1]
-
-            print '\n3/ The population standard deviations of the groups are all equal.:'
-            print 'Bartlett Test p-value: ' + str(round(bartlett(best_k_pd.mse_1.values.tolist(), 
-                                                    best_k_pd.mse_5.values.tolist(),
-                                                    best_k_pd.mse_10.values.tolist(),
-                                                    best_k_pd.mse_15.values.tolist())[1],3))
-            print '\nANOVA p-value: ' + str(round(f_oneway(best_k_pd.mse_1.values.tolist(), 
-                                                    best_k_pd.mse_5.values.tolist(),
-                                                    best_k_pd.mse_10.values.tolist(),
-                                                    best_k_pd.mse_15.values.tolist())[1],3)) + '\n'
+            # print '\n3/ The population standard deviations of the groups are all equal.:'
+            # print 'Bartlett Test p-value: ' + str(round(bartlett(best_k_pd.mse_1.values.tolist(), 
+            #                                         best_k_pd.mse_5.values.tolist(),
+            #                                         best_k_pd.mse_10.values.tolist(),
+            #                                         best_k_pd.mse_15.values.tolist())[1],3))
+            # print '\nANOVA p-value: ' + str(round(f_oneway(best_k_pd.mse_1.values.tolist(), 
+            #                                         best_k_pd.mse_5.values.tolist(),
+            #                                         best_k_pd.mse_10.values.tolist(),
+            #                                         best_k_pd.mse_15.values.tolist())[1],3)) + '\n'
 
             print '\nThe Kruskal-Wallis H-test:'
             print 'Ho: the population median of all of the groups are equal.'
@@ -1869,7 +1965,15 @@ if __name__ == '__main__':
                 print '\n' + k
                 print 'Median=' + str(round(np.median(best_k_pd[k].values.tolist()),3))
                 print 'Mean=' + str(round(np.mean(best_k_pd[k].values.tolist()),3))
-                print 'Std=' + str(round(np.std(best_k_pd[k].values.tolist()),3))            
+                print 'Std=' + str(round(np.std(best_k_pd[k].values.tolist()),3)) 
+                print 'NormalTest=' + str(normaltest(best_k_pd[k].values.tolist())[1])
+
+            print '\nkruskal p-value between k=1 and k=5: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                                                best_k_pd.mse_5.values.tolist())[1],6)) + '\n'
+            print '\nkruskal p-value between k=1 and k=10: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                                                best_k_pd.mse_10.values.tolist())[1],6)) + '\n'
+            print '\nkruskal p-value between k=1 and k=15: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                                                best_k_pd.mse_15.values.tolist())[1],6)) + '\n'    
 
         # Rotation
         elif step == 6:
@@ -1879,7 +1983,7 @@ if __name__ == '__main__':
                 outfile.close()
             valid_lst = data_pd[data_pd.train_test == 'train']['subj_name'].values.tolist()
             
-            if contrast_of_interest == 't1':
+            if contrast_of_interest == 't1' or contrast_of_interest == 't2' or contrast_of_interest == 't2s' or contrast_of_interest == 'dmri':
                 best_k = 1
 
             os.system('scp ' + fname_local_script_rot + ' ferguson:' + path_ferguson)
@@ -1891,7 +1995,7 @@ if __name__ == '__main__':
 
         # Pull Rotation from ferguson
         elif step == 7:
-            if contrast_of_interest == 't1':
+            if contrast_of_interest == 't1' or contrast_of_interest == 't2':
                 best_k = 1
             rot2tested = ['0:360:0', '6:60:60', '12:60:60', '36:360:60', '72:360:60']
             for r in rot2tested:
@@ -1911,52 +2015,30 @@ if __name__ == '__main__':
 
             path_folder_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/'
             boostrap_rot_pd = panda_boostrap_k(path_folder_pkl, rot2tested)
-            best_rot_pd = panda_best_rot(path_folder_pkl, boostrap_rot_pd, rot2tested)
+            best_rot_pd = panda_best_rot(path_folder_pkl, boostrap_rot_pd, rot2tested)[0]
             col_names = ['mse_'+str(r) for r in rot2tested]
-            plot_boostrap_k(best_rot_pd, col_names)
+            # plot_boostrap_k(best_rot_pd, col_names, contrast_of_interest)
 
-            print '\nThe ANOVA test has important assumptions that must be satisfied:'
-            print 'in order for the associated p-value to be valid.'
-            print '\n1/ The samples are independent'
-            print '\n2/ Each sample is from a normally distributed population:'
-            print 'Normal Test p-values:'
-
-            for k in col_names:
-                print k
-                print normaltest(best_rot_pd[k].values.tolist())[1]
-
-            print '\n3/ The population standard deviations of the groups are all equal.:'
-            print 'Bartlett Test p-value: ' + str(round(bartlett(best_rot_pd[col_names[0]].values.tolist(), 
-                                                    best_rot_pd[col_names[1]].values.tolist(),
-                                                    best_rot_pd[col_names[2]].values.tolist(),
-                                                    best_rot_pd[col_names[3]].values.tolist(),
-                                                    best_rot_pd[col_names[4]].values.tolist())[1],3))
-            print '\nANOVA p-value: ' + str(round(f_oneway(best_rot_pd[col_names[0]].values.tolist(), 
-                                                    best_rot_pd[col_names[1]].values.tolist(),
-                                                    best_rot_pd[col_names[2]].values.tolist(),
-                                                    best_rot_pd[col_names[3]].values.tolist(),
-                                                    best_rot_pd[col_names[4]].values.tolist())[1],3)) + '\n'
-
-            print '\nThe Kruskal-Wallis H-test:'
-            print 'Ho: the population median of all of the groups are equal.'
-            print 'It is a non-parametric version of ANOVA.'
-            print 'Note that rejecting the null hypothesis does not indicate which of the groups differs.'
-            print 'Post-hoc comparisons between groups are required to determine which groups are different.'
-            print '\nkruskal p-value: ' + str(round(kruskal(best_rot_pd[col_names[0]].values.tolist(), 
-                                                    best_rot_pd[col_names[1]].values.tolist(),
-                                                    best_rot_pd[col_names[2]].values.tolist(),
-                                                    best_rot_pd[col_names[3]].values.tolist(),
-                                                    best_rot_pd[col_names[4]].values.tolist())[1],3)) + '\n'
+            # print '\nThe Kruskal-Wallis H-test:'
+            # print 'Ho: the population median of all of the groups are equal.'
+            # print 'It is a non-parametric version of ANOVA.'
+            # print 'Note that rejecting the null hypothesis does not indicate which of the groups differs.'
+            # print 'Post-hoc comparisons between groups are required to determine which groups are different.'
+            # print '\nkruskal p-value: ' + str(round(kruskal(best_rot_pd[col_names[0]].values.tolist(), 
+            #                                         best_rot_pd[col_names[1]].values.tolist(),
+            #                                         best_rot_pd[col_names[2]].values.tolist(),
+            #                                         best_rot_pd[col_names[3]].values.tolist(),
+            #                                         best_rot_pd[col_names[4]].values.tolist())[1],3)) + '\n'
             for k in col_names:
                 print '\n' + k
                 print 'Median=' + str(round(np.median(best_rot_pd[k].values.tolist()),3))
                 print 'Mean=' + str(round(np.mean(best_rot_pd[k].values.tolist()),3))
                 print 'Std=' + str(round(np.std(best_rot_pd[k].values.tolist()),3))
+                print normaltest(best_rot_pd[k].values.tolist())[1]
 
-            print '\nkruskal between 0:360:0 and 36:360:60: p-value='
-            print round(kruskal(best_rot_pd[col_names[0]].values.tolist(), best_rot_pd[col_names[3]].values.tolist())[1],3)
-            print '\nkruskal between 0:360:0 and 36:360:60: p-value='
-            print round(kruskal(best_rot_pd[col_names[0]].values.tolist(), best_rot_pd[col_names[4]].values.tolist())[1],3)
+            for k in col_names[1:]:
+                print '\nkruskal between 0:360:0 and ' + k + ': p-value='
+                print kruskal(best_rot_pd[col_names[0]].values.tolist(), best_rot_pd[k].values.tolist())[1]
 
         # Lambda
         elif step == 10:
@@ -1966,7 +2048,7 @@ if __name__ == '__main__':
                 outfile.close()
             valid_lst = data_pd[data_pd.train_test == 'train']['subj_name'].values.tolist()
             
-            if contrast_of_interest == 't1':
+            if contrast_of_interest == 't1' or contrast_of_interest == 't2' or contrast_of_interest == 't2s' or contrast_of_interest == 'dmri':
                 best_k = 1
                 best_rot = '0:360:0'
 
@@ -1979,11 +2061,10 @@ if __name__ == '__main__':
 
         # Pull Lambda from ferguson
         elif step == 11:
-            if contrast_of_interest == 't1':
+            if contrast_of_interest == 't1' or contrast_of_interest == 't2':
                 best_k = 1
                 best_rot = '0:360:0'
-            # lambda2tested = ['0-0', '0-3', '0-6', '1-0', '1-3', '1-6', '2-0', '4-0']
-            lambda2tested = ['0-3', '0-6', '1-0', '1-3', '1-6', '2-0', '4-0']
+            lambda2tested = ['0-0', '0-3', '0-6', '1-0', '1-3', '1-6', '2-0', '4-0']
             for l in lambda2tested:
                 pull_img_rot(path_local_sdika, path_ferguson, contrast_of_interest, l)
 
@@ -2000,106 +2081,266 @@ if __name__ == '__main__':
 
             path_folder_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/'
             boostrap_lambda_pd = panda_boostrap_k(path_folder_pkl, lambda2tested)
-            best_lambda_pd = panda_best_rot(path_folder_pkl, boostrap_lambda_pd, lambda2tested)
+            best_lambda_pd = panda_best_rot(path_folder_pkl, boostrap_lambda_pd, lambda2tested)[0]
             col_names = ['mse_'+str(l) for l in lambda2tested]
-            plot_boostrap_k(best_lambda_pd, col_names)
+            # plot_boostrap_k(best_lambda_pd, col_names, contrast_of_interest)
 
-            # for k in col_names:
-            #     print '\n' + k
-            #     print 'Median=' + str(round(np.median(best_lambda_pd[k].values.tolist()),3))
-            #     print 'Mean=' + str(round(np.mean(best_lambda_pd[k].values.tolist()),3))
-            #     print 'Std=' + str(round(np.std(best_lambda_pd[k].values.tolist()),3))
+            for k in col_names:
+                print '\n' + k
+                # print 'Median=' + str(round(np.median(best_lambda_pd[k].values.tolist()),3))
+                print 'Mean=' + str(round(np.mean(best_lambda_pd[k].values.tolist()),3))
+                print 'Std=' + str(round(np.std(best_lambda_pd[k].values.tolist()),3))
+                # print normaltest(best_lambda_pd[k].values.tolist())[1]
 
-            # print '\nThe ANOVA test has important assumptions that must be satisfied:'
-            # print 'in order for the associated p-value to be valid.'
-            # print '\n1/ The samples are independent'
-            # print '\n2/ Each sample is from a normally distributed population:'
-            # print 'Normal Test p-values:'
+            # # print '\nThe Kruskal-Wallis H-test:'
+            # # print 'Ho: the population median of all of the groups are equal.'
+            # # print 'It is a non-parametric version of ANOVA.'
+            # # print 'Note that rejecting the null hypothesis does not indicate which of the groups differs.'
+            # # print 'Post-hoc comparisons between groups are required to determine which groups are different.'
+            # # print '\nkruskal p-value between No Regularization Vs. Lambda=1.0: ' + str(kruskal(best_lambda_pd[col_names[0]].values.tolist(),
+            # #                                         best_lambda_pd[col_names[3]].values.tolist())[1]) + '\n'
+            # # print '\nkruskal p-value Lambda=1.0 Vs. Lambda=4.0: ' + str(kruskal(best_lambda_pd[col_names[3]].values.tolist(),
+            # #                                         best_lambda_pd[col_names[7]].values.tolist())[1]) + '\n'
+            # # print '\nkruskal p-value Lambda=[0.3,0.6,1.0,1.3,1.6,2.0]: ' + str(kruskal(best_lambda_pd[col_names[1]].values.tolist(),
+            # #                             best_lambda_pd[col_names[2]].values.tolist(),
+            # #                             best_lambda_pd[col_names[3]].values.tolist(),
+            # #                             best_lambda_pd[col_names[4]].values.tolist(),
+            # #                             best_lambda_pd[col_names[5]].values.tolist(),
+            # #                             best_lambda_pd[col_names[6]].values.tolist())[1]) + '\n'
 
-            # for k in col_names:
-            #     print k
-            #     print normaltest(best_lambda_pd[k].values.tolist())[1]
+            for k in col_names:
+                print '\nkruskal between ' + col_names[3] + ' and ' + k + ': p-value='
+                print kruskal(best_lambda_pd[col_names[3]].values.tolist(), best_lambda_pd[k].values.tolist())[1]
 
-            # print '\nThe Kruskal-Wallis H-test:'
-            # print 'Ho: the population median of all of the groups are equal.'
-            # print 'It is a non-parametric version of ANOVA.'
-            # print 'Note that rejecting the null hypothesis does not indicate which of the groups differs.'
-            # print 'Post-hoc comparisons between groups are required to determine which groups are different.'
-            # print '\nkruskal p-value between No Regularization Vs. Lambda=1.0: ' + str(kruskal(best_lambda_pd[col_names[0]].values.tolist(),
-            #                                         best_lambda_pd[col_names[3]].values.tolist())[1]) + '\n'
-            # print '\nkruskal p-value Lambda=1.0 Vs. Lambda=4.0: ' + str(kruskal(best_lambda_pd[col_names[3]].values.tolist(),
-            #                                         best_lambda_pd[col_names[7]].values.tolist())[1]) + '\n'
-            # print '\nkruskal p-value Lambda=[0.3,0.6,1.0,1.3,1.6,2.0]: ' + str(kruskal(best_lambda_pd[col_names[1]].values.tolist(),
-            #                             best_lambda_pd[col_names[2]].values.tolist(),
-            #                             best_lambda_pd[col_names[3]].values.tolist(),
-            #                             best_lambda_pd[col_names[4]].values.tolist(),
-            #                             best_lambda_pd[col_names[5]].values.tolist(),
-            #                             best_lambda_pd[col_names[6]].values.tolist())[1]) + '\n'
-
-
-        # TEST
         elif step == 14:
+            data_stats()
+
+        elif step == 15:
 
             with open(path_local_sdika + 'info_' + contrast_of_interest + '.pkl') as outfile:    
                 data_pd = pickle.load(outfile)
                 outfile.close()
-            valid_lst = data_pd[data_pd.train_test == 'test']
-            valid_lst = valid_lst[valid_lst.patho != 'HC']['subj_name'].values.tolist()
-            if contrast_of_interest == 't1':
+            valid_lst = data_pd[data_pd.train_test == 'test']['subj_name'].values.tolist()
+            
+            if contrast_of_interest == 't1' or contrast_of_interest == 't2' or contrast_of_interest == 't2s' or contrast_of_interest == 'dmri':
                 best_k = 1
                 best_rot = '0:360:0'
+                best_lambda = '1-0'
 
-            os.system('scp ' + fname_local_script_test + ' ferguson:' + path_ferguson)
+            path_folder_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/'
+            boostrap_lambda_pd = panda_boostrap_k(path_folder_pkl, [best_lambda])
+            best_trainer = panda_best_rot(path_folder_pkl, boostrap_lambda_pd, [best_lambda])[1].split('/')[-2]
+            # boostrap_lambda_pd = panda_boostrap_k(path_folder_pkl, ['0_360_0'])
+            # best_trainer = panda_best_rot(path_folder_pkl, boostrap_lambda_pd, ['0_360_0'])[1].split('/')[-2]
+            print best_trainer
+
+            os.system('scp ' + fname_local_script_testing + ' ferguson:' + path_ferguson)
 
             path_local_train_cur = path_local_sdika+'input_train/'+contrast_of_interest+'/'+contrast_of_interest+'_'+str(best_k)+'/'
             
             send_data2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, 
-                                best_k, valid_lst, path_local_train_cur, best_rot, True)
-
-        # Pull Lambda from ferguson
-        elif step == 15:
-            if contrast_of_interest == 't1':
-                best_k = 1
-                best_rot = '0:360:0'
-            lambda2tested = ['1-0', '4-0']
-            for l in lambda2tested:
-                pull_img_rot(path_local_sdika, path_ferguson, contrast_of_interest, l)
-                compute_dataset_stats(path_local_sdika, contrast_of_interest, l)
+                                best_k, valid_lst, path_local_train_cur, best_rot, best_lambda, best_trainer, True)
 
         elif step == 16:
-            lambda2tested = ['1-0', '4-0']
+            pull_img_test(path_local_sdika, path_ferguson, contrast_of_interest)
+            compute_dataset_stats(path_local_sdika, contrast_of_interest, 'optic')
+            
+        elif step == 17:
 
-            path_folder_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/'
-            boostrap_lambda_pd = panda_boostrap_k(path_folder_pkl, lambda2tested)
-            best_lambda_pd = panda_best_rot(path_folder_pkl, boostrap_lambda_pd, lambda2tested)
-            col_names = ['mse_'+str(l) for l in lambda2tested]
-            plot_boostrap_k(best_lambda_pd, col_names)
+            cc_lst = ['t2', 't1', 't2s', 'dmri']
+            for cc in cc_lst:     
+                with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
+                    data_pd = pickle.load(outfile)
+                    outfile.close()
+                valid_lst = data_pd[data_pd.train_test == 'test']['subj_name'].values.tolist()
+                prediction_propseg(path_local_sdika, cc, valid_lst)
+                # path_hough_pkl = path_local_sdika + 'output_pkl/' + cc + '/hough/'
+                # create_folders_local([path_hough_pkl])
+                # compute_dataset_stats(path_local_sdika, cc, 'hough')
 
-            for k in col_names:
-                print '\n' + k
-                print 'Median=' + str(round(np.median(best_lambda_pd[k].values.tolist()),3))
-                print 'Mean=' + str(round(np.mean(best_lambda_pd[k].values.tolist()),3))
-                print 'Std=' + str(round(np.std(best_lambda_pd[k].values.tolist()),3))
+        elif step == 18:
+
+            cc_lst = ['t2', 't1', 't2s', 'dmri']
+            pd_lst = []
+            for cc in cc_lst:
+                with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
+                    data_pd = pickle.load(outfile)
+                    outfile.close()
+                path_optic_pkl = path_local_sdika + 'output_pkl/' + cc + '/optic/'
+                path_hough_pkl = path_local_sdika + 'output_pkl/' + cc + '/hough/'
+                pd_lst.append(panda_testing(path_optic_pkl, path_hough_pkl, data_pd, cc))
+            pd_tot = pd.concat(pd_lst)
+
+            plot_comparison_clf(pd_tot, cc_lst)
+
+        elif step == 19:
+            cc_lst = ['t2', 't1', 't2s', 'dmri']
+            time_optic, time_dyn = [], []
+            for cc in cc_lst:
+                with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
+                    data_pd = pickle.load(outfile)
+                    outfile.close()
+                data_pd = data_pd[data_pd.train_test == 'test']
+                path_optic_time = path_local_sdika + 'output_time/' + cc + '/optic/'
+                path_dyn_time = path_local_sdika + 'output_time/' + cc + '/dyn/'
+                path_data = path_local_sdika + 'input_nii/' + cc + '/'
+                time_optic_cur, time_dyn_cur = computation_time_optic_dyn(path_optic_time, path_dyn_time, data_pd, path_data)
+                time_optic.append(time_optic_cur)
+                time_dyn.append(time_dyn_cur)
+                print cc
+                print np.mean(time_optic_cur)
+                print np.std(time_optic_cur)
+                print np.mean(time_dyn_cur)
+                print np.std(time_dyn_cur)
+                print ' '
+
+            time_optic = [l for ll in time_optic for l in ll]
+            time_dyn = [l for ll in time_dyn for l in ll]
+
+            for ll in [time_optic, time_dyn]:
+                print '\nMean=' + str(round(np.mean(ll),3))
+                print 'Std=' + str(round(np.std(ll),3))
+                print 'NormalTest=' + str(normaltest(ll)[1])
+            
+            print '\nBartlett Test p-value: ' + str(round(bartlett(time_optic, time_dyn)[1],3))
+
+            print '\nANOVA p-value: ' + str(f_oneway(time_optic, time_dyn)[1]) + '\n'
+
+            print '\nkruskal p-value: ' + str(kruskal(time_optic, time_dyn)[1]) + '\n'
+
+        elif step == 20:
+
+            dct_path = {'t2': '002', 't2s': '023', 't1': '069', 'dmri': '074'}
+            for cc in ['t2', 't1', 't2s', 'dmri']:
+                with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
+                    data_pd = pickle.load(outfile)
+                    outfile.close()
+                valid_lst = data_pd[data_pd.train_test == 'test']['subj_name'].values.tolist()
+                path_ctr = path_local_sdika + 'output_nii/' + cc + '/optic/' + dct_path[cc] + '/'
+                prediction_propseg_optic(path_local_sdika, cc, valid_lst, path_ctr)
+
+        elif step == 21:
+
+            # cc_lst = ['t2', 't1', 't2s', 'dmri']
+            cc_lst = ['t1', 't2']
+            pd_lst = []
+            for cc in cc_lst:
+                with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
+                    data_pd = pickle.load(outfile)
+                    outfile.close()
+                data_pd = data_pd[data_pd.train_test == 'test']
+                path_optic_dice_time = path_local_sdika + 'propseg_optic_nii/' + cc + '/'
+                path_propseg_dice_time = path_local_sdika + 'propseg_nii/' + cc + '/'
+                path_data = path_local_sdika + 'input_nii/' + cc + '/'
+                # pd_lst.append(panda_testing_seg(path_data, path_optic_dice_time, data_pd, cc, 'optic'))
+                pd_lst.append(panda_testing_seg(path_data, path_propseg_dice_time, data_pd, cc, 'hough'))
+            pd_tot = pd.concat(pd_lst)
+            print pd_tot
+
+            # plot_comparison_clf(pd_tot, cc_lst)
+
+                # path_hough_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/hough/'
+                # create_folders_local([path_hough_pkl])
+                # compute_dataset_stats(path_local_sdika, contrast_of_interest, 'hough')
+
+    #         text = open(file_dice, 'r').read()
+    #         res_pd[res_pd.subj_name==subj_id]['dice_svm'] = float(text.split('= ')[1].split('\n')[0])
 
 
-            print '\nThe Kruskal-Wallis H-test:'
-            print 'Ho: the population median of all of the groups are equal.'
-            print 'It is a non-parametric version of ANOVA.'
-            print 'Note that rejecting the null hypothesis does not indicate which of the groups differs.'
-            print 'Post-hoc comparisons between groups are required to determine which groups are different.'
-            print '\nkruskal p-value Lambda=1.0 Vs. Lambda=4.0: ' + str(kruskal(best_lambda_pd[col_names[0]].values.tolist(),
-                                                    best_lambda_pd[col_names[1]].values.tolist())[1]) + '\n'
+
+        # elif step == 15:
+        #     with open(path_local_sdika + 'info_' + contrast_of_interest + '.pkl') as outfile:    
+        #         data_pd = pickle.load(outfile)
+        #         outfile.close()
+        #     valid_lst = data_pd[data_pd.train_test == 'train']['subj_name'].values.tolist()
+            
+        #     if contrast_of_interest == 't1' or contrast_of_interest == 't2' or contrast_of_interest == 't2s' or contrast_of_interest == 'dmri':
+        #         best_k = 1
+        #         best_rot = '0:360:0'
+
+        #     os.system('scp ' + fname_local_script_test + ' ferguson:' + path_ferguson)
+
+        #     path_local_train_cur = path_local_sdika+'input_train/'+contrast_of_interest+'/'+contrast_of_interest+'_'+str(best_k)+'/'
+            
+        #     send_data2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, 
+        #                         best_k, valid_lst, path_local_train_cur, best_rot, True)
+
+        # elif step == 16:
+        #     # if contrast_of_interest == 't1' or contrast_of_interest == 't2':
+        #     #     best_k = 1
+        #     #     best_rot = '0:360:0'
+        #     lambda2tested = ['0-6']
+        #     # for l in lambda2tested:
+        #     #     pull_img_rot(path_local_sdika, path_ferguson, contrast_of_interest, l)
+        #     #     compute_dataset_stats(path_local_sdika, contrast_of_interest, l)
+        #     path_folder_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/'
+        #     boostrap_lambda_pd = panda_boostrap_k(path_folder_pkl, lambda2tested)
+        #     best_lambda_pd = panda_best_rot(path_folder_pkl, boostrap_lambda_pd, lambda2tested)
+
+        # # TEST
+        # elif step == 14:
+
+        #     with open(path_local_sdika + 'info_' + contrast_of_interest + '.pkl') as outfile:    
+        #         data_pd = pickle.load(outfile)
+        #         outfile.close()
+        #     valid_lst = data_pd[data_pd.train_test == 'test']
+        #     valid_lst = valid_lst[valid_lst.patho != 'HC']['subj_name'].values.tolist()
+        #     if contrast_of_interest == 't1':
+        #         best_k = 1
+        #         best_rot = '0:360:0'
+
+        #     os.system('scp ' + fname_local_script_test + ' ferguson:' + path_ferguson)
+
+        #     path_local_train_cur = path_local_sdika+'input_train/'+contrast_of_interest+'/'+contrast_of_interest+'_'+str(best_k)+'/'
+            
+        #     send_data2ferguson(path_local_sdika, path_ferguson, contrast_of_interest, 
+        #                         best_k, valid_lst, path_local_train_cur, best_rot, True)
+
+        # # Pull Lambda from ferguson
+        # elif step == 15:
+        #     if contrast_of_interest == 't1':
+        #         best_k = 1
+        #         best_rot = '0:360:0'
+        #     lambda2tested = ['1-0', '4-0']
+        #     for l in lambda2tested:
+        #         pull_img_rot(path_local_sdika, path_ferguson, contrast_of_interest, l)
+        #         compute_dataset_stats(path_local_sdika, contrast_of_interest, l)
+
+        # elif step == 16:
+        #     lambda2tested = ['1-0', '4-0']
+
+        #     path_folder_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/'
+        #     boostrap_lambda_pd = panda_boostrap_k(path_folder_pkl, lambda2tested)
+        #     best_lambda_pd = panda_best_rot(path_folder_pkl, boostrap_lambda_pd, lambda2tested)
+        #     col_names = ['mse_'+str(l) for l in lambda2tested]
+        #     plot_boostrap_k(best_lambda_pd, col_names)
+
+        #     for k in col_names:
+        #         print '\n' + k
+        #         print 'Median=' + str(round(np.median(best_lambda_pd[k].values.tolist()),3))
+        #         print 'Mean=' + str(round(np.mean(best_lambda_pd[k].values.tolist()),3))
+        #         print 'Std=' + str(round(np.std(best_lambda_pd[k].values.tolist()),3))
+
+
+        #     print '\nThe Kruskal-Wallis H-test:'
+        #     print 'Ho: the population median of all of the groups are equal.'
+        #     print 'It is a non-parametric version of ANOVA.'
+        #     print 'Note that rejecting the null hypothesis does not indicate which of the groups differs.'
+        #     print 'Post-hoc comparisons between groups are required to determine which groups are different.'
+        #     print '\nkruskal p-value Lambda=1.0 Vs. Lambda=4.0: ' + str(kruskal(best_lambda_pd[col_names[0]].values.tolist(),
+        #                                             best_lambda_pd[col_names[1]].values.tolist())[1]) + '\n'
 
 
 
 
-        # Lambda
-        # elif step == 11:
-            # with open(path_local_sdika + 'info_' + contrast_of_interest + '.pkl') as outfile:    
-            #     data_pd = pickle.load(outfile)
-            #     outfile.close()
-            # test_lst = data_pd[data_pd.train_test == 'test']['subj_name'].values.tolist()
-
+        # # Lambda
+        # elif step == 17:
+        #     with open(path_local_sdika + 'info_' + contrast_of_interest + '.pkl') as outfile:    
+        #         data_pd = pickle.load(outfile)
+        #         outfile.close()
+        #     test_lst = data_pd[data_pd.train_test == 'train']['subj_name'].values.tolist()
+        #     test_lst = [t for t in test_lst if t.startswith('twh')]
+        #     print len(test_lst)
             # path_local_gold = path_local_sdika + 'gold/' + contrast_of_interest + '/'
             # path_local_seg = path_local_sdika + 'input_nii/' + contrast_of_interest + '/'
 
@@ -2107,29 +2348,29 @@ if __name__ == '__main__':
             # for t in test_lst:
             #     dct_tmp[t] = {'0_360_0': [], '36_360_60': []}
 
-            #     for r,rr in zip(['0_360_0/069', '36_360_60/026'],['0_360_0', '36_360_60']):
+            #     for r,rr in zip(['0_360_0/002', '36_360_60/064'],['0_360_0', '36_360_60']):
             #         path_local_nii = path_local_sdika + 'output_nii/' + contrast_of_interest + '/'+r+'/'
             #         path_cur_pred = path_local_nii + t + '_centerline_pred.nii.gz'
             #         path_cur_gold = path_local_gold + t + '_centerline_gold.nii.gz'
             #         path_cur_gold_seg = path_local_seg + t + '_seg.nii.gz'
+            #         if os.path.isfile(path_cur_pred):
 
-            #         img_pred = Image(path_cur_pred)
-            #         img_true = Image(path_cur_gold)
-            #         img_seg_true = Image(path_cur_gold_seg)
+            #             img_pred = Image(path_cur_pred)
+            #             img_true = Image(path_cur_gold)
+            #             img_seg_true = Image(path_cur_gold_seg)
 
-            #         for z in range(img_true.dim[2]):
+            #             for z in range(img_true.dim[2]):
 
-            #             if np.sum(img_true.data[:,:,z]):
-            #                 x_true, y_true = [np.where(img_true.data[:,:,z] > 0)[i][0] 
-            #                                     for i in range(len(np.where(img_true.data[:,:,z] > 0)))]
-            #                 x_pred, y_pred = [np.where(img_pred.data[:,:,z] > 0)[i][0]
-            #                                     for i in range(len(np.where(img_pred.data[:,:,z] > 0)))]
+            #                 if np.sum(img_true.data[:,:,z]):
+            #                     x_true, y_true = [np.where(img_true.data[:,:,z] > 0)[i][0] 
+            #                                         for i in range(len(np.where(img_true.data[:,:,z] > 0)))]
+            #                     x_pred, y_pred = [np.where(img_pred.data[:,:,z] > 0)[i][0]
+            #                                         for i in range(len(np.where(img_pred.data[:,:,z] > 0)))]
 
-            #                 x_true, y_true = img_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], img_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
-            #                 x_pred, y_pred = img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
+            #                     x_true, y_true = img_true.transfo_pix2phys([[x_true, y_true, z]])[0][0], img_true.transfo_pix2phys([[x_true, y_true, z]])[0][1]
+            #                     x_pred, y_pred = img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][0], img_pred.transfo_pix2phys([[x_pred, y_pred, z]])[0][1]
 
-            #                 dct_tmp[t][rr].append(((x_true-x_pred))**2 + ((y_true-y_pred))**2)
-
+            #                     dct_tmp[t][rr].append(((x_true-x_pred))**2 + ((y_true-y_pred))**2)
             # with open(path_local_sdika + 'rot_' + contrast_of_interest + '.pkl', 'wb') as f:
             #     pickle.dump(dct_tmp, f)
             #     f.close()
