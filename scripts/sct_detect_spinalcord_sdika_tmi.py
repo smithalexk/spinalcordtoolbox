@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import itertools
 import pandas as pd
-from scipy.stats import ttest_rel, ttest_ind, f_oneway, normaltest, bartlett, norm, kruskal, kstest, anderson, shapiro
+from scipy.stats import ttest_rel, ttest_ind, f_oneway, normaltest, bartlett, norm, kruskal, kstest, wilcoxon, anderson, shapiro
 # SCT Imports
 from msct_image import Image
 import sct_utils as sct
@@ -2171,7 +2171,24 @@ if __name__ == '__main__':
                 pd_lst.append(panda_testing(path_optic_pkl, path_hough_pkl, data_pd, cc))
             pd_tot = pd.concat(pd_lst)
 
-            plot_comparison_clf(pd_tot, cc_lst)
+            for m in ['mse', 'zcoverage']:
+                print '\n' + m
+                z_optic = pd_tot[(pd_tot.algo=='optic')][m].values.tolist()
+                z_hough = pd_tot[(pd_tot.algo=='hough')][m].values.tolist()
+                z_hough = [z for z in z_hough if str(z) != 'nan']
+                print np.mean(z_optic), np.std(z_optic), normaltest(z_optic)[1]
+                print np.mean(z_hough), np.std(z_hough), normaltest(z_hough)[1]
+                if len(z_optic)<len(z_hough):
+                    random.shuffle(z_hough)
+                    z_hough = z_hough[:len(z_optic)]
+                elif len(z_optic)>len(z_hough):
+                    random.shuffle(z_optic)
+                    z_optic = z_optic[:len(z_hough)]
+                print len(z_optic), len(z_hough)
+                print wilcoxon(z_optic, z_hough)[1]
+
+
+            # plot_comparison_clf(pd_tot, cc_lst)
 
         elif step == 19:
             cc_lst = ['t2', 't1', 't2s', 'dmri']
@@ -2247,38 +2264,73 @@ if __name__ == '__main__':
     #         res_pd[res_pd.subj_name==subj_id]['dice_svm'] = float(text.split('= ')[1].split('\n')[0])
 
         elif step == 22:
-            list_k = [1, 5, 10, 15]
             list_cc = ['t1', 't2', 't2s', 'dmri']
+            dict_hyper = {
+                            # 'k': [1, 5, 10, 15],
+                            # 'rot': ['0_360_0', '6_60_60', '12_60_60', '36_360_60', '72_360_60'],
+                            'lambda': ['0-0', '0-3', '0-6', '1-0', '1-3', '1-6', '2-0', '4-0']
+                        }
+            l_stg = ['0.0', '0.3', '0.6', '1.0', '1.3', '1.6', '2.0', '4.0']
 
             for c in list_cc:
                 print '\nContrast'
-                path_folder_pkl = path_local_sdika + 'output_pkl/' + c + '/'
-                boostrap_k_pd = panda_boostrap_k(path_folder_pkl, list_k)
-                best_k_pd = panda_best_k(path_folder_pkl, boostrap_k_pd, list_k)
-                col_names = ['mse_'+str(k) for k in list_k]
+                for h in dict_hyper:
+                    path_folder_pkl = path_local_sdika + 'output_pkl/' + c + '/'
+                    print dict_hyper[h]
+                    boostrap_k_pd = panda_boostrap_k(path_folder_pkl, dict_hyper[h])
+                    if h == 'k':
+                        best_k_pd = panda_best_k(path_folder_pkl, boostrap_k_pd, dict_hyper[h])
+                    else:
+                        best_k_pd = panda_best_rot(path_folder_pkl, boostrap_k_pd, dict_hyper[h])[0]
+                    col_names = ['mse_'+str(k) for k in dict_hyper[h]]
 
-                dct_tmp = {'param': [], 'value': []}
+                    dct_tmp = {'param': [], 'value': []}
 
-                for k in col_names:
-                    dct_tmp['value'] = best_k_pd[k].values.tolist()
-                    dct_tmp['param'] = [k for i in range(len(best_k_pd[k].values.tolist()))]
+                    for i_k, k in enumerate(col_names):
+                        for i in range(len(best_k_pd[k].values.tolist())):
+                            dct_tmp['value'].append(best_k_pd[k].values.tolist()[i])
+                            if h == 'lambda':
+                                dct_tmp['param'].append(l_stg[i_k])
+                            else:
+                                dct_tmp['param'].append(k.split('mse_')[1].zfill(2))
 
-                # print '\nkruskal p-value between k=1 and k=5: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
-                #                                     best_k_pd.mse_5.values.tolist())[1],6)) + '\n'
-                # print '\nkruskal p-value between k=1 and k=10: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
-                #                                     best_k_pd.mse_10.values.tolist())[1],6)) + '\n'
-                # print '\nkruskal p-value between k=1 and k=15: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
-                #                                     best_k_pd.mse_15.values.tolist())[1],6)) + '\n'
+                    # print '\nkruskal p-value between k=1 and k=5: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                    #                                     best_k_pd.mse_5.values.tolist())[1],6)) + '\n'
+                    # print '\nkruskal p-value between k=1 and k=10: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                    #                                     best_k_pd.mse_10.values.tolist())[1],6)) + '\n'
+                    # print '\nkruskal p-value between k=1 and k=15: ' + str(round(kruskal(best_k_pd.mse_1.values.tolist(), 
+                    #                                     best_k_pd.mse_15.values.tolist())[1],6)) + '\n'
 
-                print pd.DataFrame.from_dict(dct_tmp)
+                    pd2plot = pd.DataFrame.from_dict(dct_tmp)
 
-
-
-
-
-
-
-
+                    sns.set(style="whitegrid", font_scale=1.3)
+                    # if h=='lambda':
+                    #     fig, (ax, ax2) = plt.subplots(2, 1, sharey='col', sharex=True, figsize=(10, 10))
+                        # ax.set_ylim(0.0, 2.0)  # outliers only
+                    #     ax2.set_ylim(50, .22)  # most of the data
+                    # else:
+                    fig, axes = plt.subplots(1, 1, sharey='col', figsize=(10, 10))
+                    fig.subplots_adjust(left=0.1, bottom=0.05)
+                    a = plt.subplot(1, 1, 1)
+                    ax = sns.pointplot(x='param', y='value', data=pd2plot, ci=68, linestyles=[' '], color='firebrick')
+                    # ax2 = sns.pointplot(x='param', y='value', data=pd2plot, ci=68, linestyles=[' '], color='firebrick')
+                    a.set_ylabel('')
+                    a.set_xlabel('')
+                    plt.yticks(size=30)
+                    plt.xticks(size=30)
+                    if h=='lambda':
+                        if c == 't2':
+                            ax.set_ylim([0.9, 1.6])
+                        elif c == 't2s':
+                            ax.set_ylim([0.8, 1.6])
+                        elif c == 't1':
+                            ax.set_ylim([0.8, 1.1])
+                        elif c == 'dmri':
+                            ax.set_ylim([0.8, 1.3])
+                    # plt.show()
+                    fig.savefig(path_local_sdika + 'plots/' + c + '_' + h +' .png')
+                    plt.close()
+                    
 
 
 
