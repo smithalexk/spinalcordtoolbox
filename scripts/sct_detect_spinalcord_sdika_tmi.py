@@ -1357,61 +1357,68 @@ def test_trainers_best(path_local, cc, mm, pp_ferg):
 # ******************************************************************************************
 
 
-def plot_comparison_clf(pd_tot, cc_lst):
+def plot_comparison_clf(path_local, pd_tot, cc_lst):
 
     for clf in ['hough', 'optic']:
-        for mm_name in ['mse', 'zcoverage']:
+        for mm_name in ['mse', 'zcoverage', 'dice']:
 
-            pd_2plot = pd_tot[pd_tot.algo==clf]
+            if mm_name in pd_tot:
+                pd_2plot = pd_tot[pd_tot.algo==clf]
 
-            if mm_name != 'zcoverage':
-                y_lim_min, y_lim_max = -1, 50
-            else:
-                y_lim_min, y_lim_max = -1, 101
+                if mm_name == 'mse':
+                    y_lim_min, y_lim_max = -1, 50
+                elif mm_name == 'dice':
+                    y_lim_min, y_lim_max = -0.01, 1.01
+                else:
+                    y_lim_min, y_lim_max = -1, 101
 
-            sns.set(style="whitegrid", palette="Set1", font_scale=1.3)
+                sns.set(style="whitegrid", palette="Set1", font_scale=1.3)
 
-            fig, axes = plt.subplots(1, 1, sharey='col', figsize=(32, 16))
-            fig.subplots_adjust(left=0.05, bottom=0.05)
+                fig, axes = plt.subplots(1, 1, sharey='col', figsize=(32, 16))
+                fig.subplots_adjust(left=0.05, bottom=0.05)
 
-            palette_violon = dict(t2='navajowhite', t1='skyblue', t2s='mediumaquamarine', dmri='lightpink')
-            palette_swarm = dict(HC = 'royalblue', patho = 'firebrick')
+                palette_violon = dict(t2='navajowhite', t1='skyblue', t2s='mediumaquamarine', dmri='lightpink')
+                palette_swarm = dict(HC = 'royalblue', patho = 'firebrick')
 
-            a = plt.subplot(1, 1, 1)
-            sns.violinplot(x='contrast', y=mm_name, data=pd_2plot, order=cc_lst,
-                                  inner=None, cut=0, scale="count",
-                                  sharey=True,  palette=palette_violon, bw=0.15)
+                a = plt.subplot(1, 1, 1)
+                sns.violinplot(x='contrast', y=mm_name, data=pd_2plot, order=cc_lst,
+                                      inner=None, cut=0, scale="count",
+                                      sharey=True,  palette=palette_violon, bw=0.15)
+                # a_violon = sns.violinplot(x='contrast', y=mm_name, data=pd_2plot, order=cc_lst,
+                #                       inner=None, cut=0, scale="count",
+                #                       sharey=True,  bw=0.15, hue='patho', split=True)
+                a_swarm = sns.swarmplot(x='contrast', y=mm_name, data=pd_2plot, order=cc_lst, hue='patho',
+                                        size=8, palette=palette_swarm)
 
-            a_swarm = sns.swarmplot(x='contrast', y=mm_name, data=pd_2plot, order=cc_lst, hue='patho',
-                                    size=6, palette=palette_swarm)
+                a_swarm.legend_.remove()
+                # a_violon.legend_.remove()
 
-            a_swarm.legend_.remove()
+                a.set_ylim([y_lim_min,y_lim_max])
+                plt.yticks(size=30)
+                a.set_ylabel('')    
+                a.set_xlabel('')
 
-            a.set_ylim([y_lim_min,y_lim_max])
-            plt.yticks(size=30)
-            a.set_ylabel('')    
-            a.set_xlabel('')
+                plt.show()
+                fig.tight_layout()
+                fig.savefig(path_local+'plots/'+clf+'_'+mm_name+'_bis.png')
+                plt.close()
 
-            plt.show()
-            fig.tight_layout()
-            plt.close()
-
-            
-            for cc in cc_lst:
-                print '***** ' + clf + '_' + mm_name + '_' + cc + ' *****'
-                pd_2mean = pd_2plot[pd_2plot.contrast==cc]
-                values = pd_2mean[mm_name].values.tolist()
-                values = [v for v in values if str(v)!='nan']
-                print 'Mean:' + str(round(np.mean(values),2))
-                print 'Std:' + str(round(np.std(values),2))
-                values_hc = pd_2mean[pd_2mean.patho=='HC'][mm_name].values.tolist()
-                values_hc = [v for v in values_hc if str(v)!='nan']
-                print 'Mean_HC:' + str(round(np.mean(values_hc),2))
-                print 'Std_HC:' + str(round(np.std(values_hc),2))
-                values_patho = pd_2mean[pd_2mean.patho=='patho'][mm_name].values.tolist()
-                values_patho = [v for v in values_patho if str(v)!='nan']
-                print 'Mean_patho:' + str(round(np.mean(values_patho),2))
-                print 'Std_patho:' + str(round(np.std(values_patho),2))
+                
+                for cc in cc_lst:
+                    print '***** ' + clf + '_' + mm_name + '_' + cc + ' *****'
+                    pd_2mean = pd_2plot[pd_2plot.contrast==cc]
+                    values = pd_2mean[mm_name].values.tolist()
+                    values = [v for v in values if str(v)!='nan']
+                    print 'Mean:' + str(round(np.mean(values),2))
+                    print 'Std:' + str(round(np.std(values),2))
+                    values_hc = pd_2mean[pd_2mean.patho=='HC'][mm_name].values.tolist()
+                    values_hc = [v for v in values_hc if str(v)!='nan']
+                    print 'Mean_HC:' + str(round(np.mean(values_hc),2))
+                    print 'Std_HC:' + str(round(np.std(values_hc),2))
+                    values_patho = pd_2mean[pd_2mean.patho=='patho'][mm_name].values.tolist()
+                    values_patho = [v for v in values_patho if str(v)!='nan']
+                    print 'Mean_patho:' + str(round(np.mean(values_patho),2))
+                    print 'Std_patho:' + str(round(np.std(values_patho),2))
 
 def compute_dice(path_local, nb_img=1):
 
@@ -1600,17 +1607,17 @@ def data_stats():
         with open(path_local_sdika + 'info_' + c + '.pkl') as outfile:    
             data_pd = pickle.load(outfile)
             outfile.close()
-    # # #     path_lst = [path_local_sdika + 'input_nii/' + c + '/' + s + '.nii.gz' for s in data_pd.subj_name.values.tolist()]
-    # # #     resol_dct_cur = info_resol(path_lst)
-    # # #     for r in resol_dct:
-    # # #         if 'nb' in resol_dct_cur[r]:
-    # # #             resol_dct[r]['nb'] += resol_dct_cur[r]['nb']
-    # # #         if 'in_plane' in resol_dct[r] and 'in_plane' in resol_dct_cur[r]:
-    # # #             for rr in resol_dct_cur[r]['in_plane']:
-    # # #                 resol_dct[r]['in_plane'].append(rr)
-    # # #         if 'thick' in resol_dct[r] and 'thick' in resol_dct_cur[r]:
-    # # #             for rr in resol_dct_cur[r]['thick']:
-    # # #                 resol_dct[r]['thick'].append(rr)
+        # path_lst = [path_local_sdika + 'input_nii/' + c + '/' + s + '.nii.gz' for s in data_pd.subj_name.values.tolist()]
+        # resol_dct_cur = info_resol(path_lst)
+        # for r in resol_dct:
+        #     if 'nb' in resol_dct_cur[r]:
+        #         resol_dct[r]['nb'] += resol_dct_cur[r]['nb']
+        #     if 'in_plane' in resol_dct[r] and 'in_plane' in resol_dct_cur[r]:
+        #         for rr in resol_dct_cur[r]['in_plane']:
+        #             resol_dct[r]['in_plane'].append(rr)
+        #     if 'thick' in resol_dct[r] and 'thick' in resol_dct_cur[r]:
+        #         for rr in resol_dct_cur[r]['thick']:
+        #             resol_dct[r]['thick'].append(rr)
 
         c_dct[c] += len(data_pd['center'].values.tolist())
         center_lst_cur = data_pd['center'].values.tolist()
@@ -1661,78 +1668,83 @@ def data_stats():
     for r in resol_dct:
         print '\n' + r + ' : ' + str(resol_dct[r]['nb'])
 
+    for r in resol_dct:
+        print '\n' + r
+        thick = resol_dct[r]['thick']
+        print min(thick), max(thick)
+        in_plane = resol_dct[r]['in_plane']
+        print min(in_plane), max(in_plane)
 
-
-    # order_lst = ['in_plane']
-    # dct_cur = {'orient': [], 'in_plane': []}
-    # for r in resol_dct:
-    #     for i in resol_dct[r]['in_plane']:
-    #         dct_cur['in_plane'].append(i)
-    #         dct_cur['orient'].append('in_plane')
+    order_lst = ['in_plane']
+    dct_cur = {'orient': [], 'in_plane': []}
+    for r in resol_dct:
+        for i in resol_dct[r]['in_plane']:
+            dct_cur['in_plane'].append(i)
+            dct_cur['orient'].append('in_plane')
 
 
     
-    # cmpt_dct = dict(Counter(dct_cur['in_plane']))
-    # keys_lst = np.unique(dct_cur['in_plane'])
-    # for k in keys_lst:
-    #     print '\n' + str(k) + ' : ' + str(cmpt_dct[k])
+    cmpt_dct = dict(Counter(dct_cur['in_plane']))
+    keys_lst = np.unique(dct_cur['in_plane'])
+    for k in keys_lst:
+        print '\n' + str(k) + ' : ' + str(cmpt_dct[k])
 
 
-    # pd_res = pd.DataFrame.from_dict(dct_cur)
-    # # print pd_res
-    # sns.set(style="whitegrid", font_scale=1.3)
-    # palette_violon = dict(in_plane='skyblue')           
-    # fig, axes = plt.subplots(1, 1, sharey='col', figsize=(8, 8))
-    # fig.subplots_adjust(left=0.05, bottom=0.05)
-    # a = plt.subplot(1, 1, 1)
-    # sns.violinplot(x='orient', y='in_plane', data=pd_res, order=order_lst,
-    #                         inner=None, cut=0, scale="count",
-    #                         sharey=True,  palette=palette_violon, bw=0.15)
-    # # sns.swarmplot(x='orient', y='in_plane', data=pd_res, order=order_lst, size=3,
-    # #                     color=(0.2,0.2,0.2))
-    # a.set_ylabel('')
-    # a.set_xlabel('')
-    # plt.yticks(size=16)
-    # plt.show()
-    # # fig.tight_layout()
-    # plt.close()
+    pd_res = pd.DataFrame.from_dict(dct_cur)
+    # print pd_res
+    sns.set(style="white", font_scale=1.3)
+    palette_violon = dict(in_plane='skyblue')           
+    fig, axes = plt.subplots(1, 1, sharey='col', figsize=(16, 16))
+    fig.subplots_adjust(left=0.05, bottom=0.05)
+    a = plt.subplot(1, 1, 1)
+    sns.violinplot(x='orient', y='in_plane', data=pd_res, order=order_lst,
+                            inner=None, cut=0, scale="count",
+                            sharey=True,  palette=palette_violon, bw=0.15)
+    # sns.swarmplot(x='orient', y='in_plane', data=pd_res, order=order_lst, size=3,
+    #                     color=(0.2,0.2,0.2))
+    a.set_ylabel('')
+    a.set_xlabel('')
+    plt.yticks(size=16)
+    plt.show()
+    # fig.tight_layout()
+    plt.close()
 
 
 
-    # order_lst = ['thick']
-    # dct_cur = {'orient': [], 'thick': []}
-    # for r in resol_dct:
-    #     for i in resol_dct[r]['thick']:
-    #         dct_cur['thick'].append(i)
-    #         dct_cur['orient'].append('thick')
+    order_lst = ['thick']
+    dct_cur = {'orient': [], 'thick': []}
+    for r in resol_dct:
+        for i in resol_dct[r]['thick']:
+            dct_cur['thick'].append(i)
+            dct_cur['orient'].append('thick')
 
-    # cmpt_dct = dict(Counter(dct_cur['thick']))
-    # keys_lst = np.unique(dct_cur['thick'])
-    # for k in keys_lst:
-    #     print '\n' + str(k) + ' : ' + str(cmpt_dct[k])
+    cmpt_dct = dict(Counter(dct_cur['thick']))
+    keys_lst = np.unique(dct_cur['thick'])
+    for k in keys_lst:
+        print '\n' + str(k) + ' : ' + str(cmpt_dct[k])
 
-    # pd_res = pd.DataFrame.from_dict(dct_cur)
-    # # print pd_res
-    # sns.set(style="whitegrid", font_scale=1.3)
-    # palette_violon = dict(thick='plum')           
-    # fig, axes = plt.subplots(1, 1, sharey='col', figsize=(8, 8))
-    # fig.subplots_adjust(left=0.05, bottom=0.05)
-    # a = plt.subplot(1, 1, 1)
-    # sns.violinplot(x='orient', y='thick', data=pd_res, order=order_lst,
-    #                         inner=None, cut=0, scale="count",
-    #                         sharey=True,  palette=palette_violon, bw=0.15)
-    # # sns.swarmplot(x='orient', y='thick', data=pd_res, order=order_lst, size=2.5,
-    # #                     color=(0.2,0.2,0.2))
-    # a.set_ylabel('')
-    # a.set_xlabel('')
-    # plt.yticks(size=16)
-    # plt.show()
-    # # fig.tight_layout()
-    # plt.close()
+    pd_res = pd.DataFrame.from_dict(dct_cur)
+    # print pd_res
+    sns.set(style="white", font_scale=1.3)
+    palette_violon = dict(thick='plum')           
+    fig, axes = plt.subplots(1, 1, sharey='col', figsize=(16, 16))
+    fig.subplots_adjust(left=0.05, bottom=0.05)
+    a = plt.subplot(1, 1, 1)
+    sns.violinplot(x='orient', y='thick', data=pd_res, order=order_lst,
+                            inner=None, cut=0, scale="count",
+                            sharey=True,  palette=palette_violon, bw=0.15)
+    # sns.swarmplot(x='orient', y='thick', data=pd_res, order=order_lst, size=2.5,
+    #                     color=(0.2,0.2,0.2))
+    a.set_ylabel('')
+    a.set_xlabel('')
+    plt.yticks(size=16)
+    plt.show()
+    # fig.tight_layout()
+    plt.close()
 
-    # print '\n\n'
-    # print 'ALPHA PLOT'
-    # print '\n\n'
+    print '\n\n'
+    print 'ALPHA PLOT'
+    print '\n\n'
 
 
 def prediction_propseg(path_local, cc, testing_lst):
@@ -2115,6 +2127,12 @@ if __name__ == '__main__':
         elif step == 14:
             data_stats()
 
+            # with open(path_local_sdika + 'info_' + contrast_of_interest + '.pkl') as outfile:    
+            #     data_pd = pickle.load(outfile)
+            #     outfile.close()
+
+            # print data_pd[data_pd.patho != 'HC']
+
         elif step == 15:
 
             with open(path_local_sdika + 'info_' + contrast_of_interest + '.pkl') as outfile:    
@@ -2239,32 +2257,47 @@ if __name__ == '__main__':
         elif step == 21:
 
             cc_lst = ['t2', 't1', 't2s', 'dmri']
-            # cc_lst = ['t1', 't2']
-            pd_lst = []
-            for cc in cc_lst:
-                with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
-                    data_pd = pickle.load(outfile)
-                    outfile.close()
-                data_pd = data_pd[data_pd.train_test == 'test']
-                path_optic_dice_time = path_local_sdika + 'propseg_optic_nii/' + cc + '/'
-                path_propseg_dice_time = path_local_sdika + 'propseg_nii/' + cc + '/'
-                path_data = path_local_sdika + 'input_nii/' + cc + '/'
-                # pd_lst.append(panda_testing_seg(path_data, path_optic_dice_time, data_pd, cc, 'optic'))
-                pd_lst.append(panda_testing_seg(path_data, path_propseg_dice_time, data_pd, cc, 'hough'))
-            pd_tot = pd.concat(pd_lst)
-            print pd_tot
+            # pd_lst = []
+            # for cc in cc_lst:
+            #     with open(path_local_sdika + 'info_' + cc + '.pkl') as outfile:    
+            #         data_pd = pickle.load(outfile)
+            #         outfile.close()
+            #     data_pd = data_pd[data_pd.train_test == 'test']
+            #     path_optic_dice_time = path_local_sdika + 'propseg_optic_nii/' + cc + '/'
+            #     path_propseg_dice_time = path_local_sdika + 'propseg_nii/' + cc + '/'
+            #     path_data = path_local_sdika + 'input_nii/' + cc + '/'
+            #     pd_lst.append(panda_testing_seg(path_data, path_optic_dice_time, data_pd, cc, 'optic'))
+            #     pd_lst.append(panda_testing_seg(path_data, path_propseg_dice_time, data_pd, cc, 'hough'))
+            # pd_tot = pd.concat(pd_lst)
 
-            # plot_comparison_clf(pd_tot, cc_lst)
+            # with open(path_local_sdika + 'dice_time.pkl', 'wb') as f:
+            #     pickle.dump(pd_tot, f)
+            #     f.close()
+            with open(path_local_sdika + 'dice_time.pkl') as outfile:    
+                data_pd = pickle.load(outfile)
+                outfile.close()
 
-                # path_hough_pkl = path_local_sdika + 'output_pkl/' + contrast_of_interest + '/hough/'
-                # create_folders_local([path_hough_pkl])
-                # compute_dataset_stats(path_local_sdika, contrast_of_interest, 'hough')
+            # for m in ['dice', 'time']:
+            #     print '\n' + m
+            #     z_optic = data_pd[(data_pd.algo=='optic')][m].values.tolist()
+            #     z_hough = data_pd[(data_pd.algo=='hough')][m].values.tolist()
+            #     print np.mean(z_optic), np.std(z_optic), normaltest(z_optic)[1], len(z_optic)
+            #     print np.mean(z_hough), np.std(z_hough), normaltest(z_hough)[1], len(z_hough)
+            #     if len(z_optic)<len(z_hough):
+            #         random.shuffle(z_hough)
+            #         z_hough = z_hough[:len(z_optic)]
+            #     elif len(z_optic)>len(z_hough):
+            #         random.shuffle(z_optic)
+            #         z_optic = z_optic[:len(z_hough)]
+            #     print len(z_optic), len(z_hough)
+            #     print wilcoxon(z_optic, z_hough)[1]
 
-    #         text = open(file_dice, 'r').read()
-    #         res_pd[res_pd.subj_name==subj_id]['dice_svm'] = float(text.split('= ')[1].split('\n')[0])
+            # print data_pd[(data_pd.dice<0.5)&(data_pd.algo=='optic')]
+            plot_comparison_clf(path_local_sdika, data_pd, cc_lst)
 
         elif step == 22:
-            list_cc = ['t1', 't2', 't2s', 'dmri']
+            # list_cc = ['t1', 't2', 't2s', 'dmri']
+            list_cc = ['dmri']
             dict_hyper = {
                             # 'k': [1, 5, 10, 15],
                             # 'rot': ['0_360_0', '6_60_60', '12_60_60', '36_360_60', '72_360_60'],
@@ -2304,16 +2337,10 @@ if __name__ == '__main__':
                     pd2plot = pd.DataFrame.from_dict(dct_tmp)
 
                     sns.set(style="whitegrid", font_scale=1.3)
-                    # if h=='lambda':
-                    #     fig, (ax, ax2) = plt.subplots(2, 1, sharey='col', sharex=True, figsize=(10, 10))
-                        # ax.set_ylim(0.0, 2.0)  # outliers only
-                    #     ax2.set_ylim(50, .22)  # most of the data
-                    # else:
                     fig, axes = plt.subplots(1, 1, sharey='col', figsize=(10, 10))
                     fig.subplots_adjust(left=0.1, bottom=0.05)
                     a = plt.subplot(1, 1, 1)
                     ax = sns.pointplot(x='param', y='value', data=pd2plot, ci=68, linestyles=[' '], color='firebrick')
-                    # ax2 = sns.pointplot(x='param', y='value', data=pd2plot, ci=68, linestyles=[' '], color='firebrick')
                     a.set_ylabel('')
                     a.set_xlabel('')
                     plt.yticks(size=30)
@@ -2328,7 +2355,18 @@ if __name__ == '__main__':
                         elif c == 'dmri':
                             ax.set_ylim([0.8, 1.3])
                     # plt.show()
-                    fig.savefig(path_local_sdika + 'plots/' + c + '_' + h +' .png')
+                    fig.savefig(path_local_sdika + 'plots/' + c + '_' + h +'.png')
+                    if h=='lambda':
+                        print np.mean(pd2plot[pd2plot.param=='0.0'].value.values.tolist())
+                        if c == 't2':
+                            ax.set_ylim([124.7, 124.8])
+                        elif c == 't2s':
+                            ax.set_ylim([113.7, 113.8])
+                        elif c == 't1':
+                            ax.set_ylim([137.2, 137.3])
+                        elif c == 'dmri':
+                            ax.set_ylim([79.1, 79.2])
+                        fig.savefig(path_local_sdika + 'plots/' + c + '_' + h +'_bis.png')
                     plt.close()
                     
 
