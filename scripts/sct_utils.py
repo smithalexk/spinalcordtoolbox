@@ -634,6 +634,9 @@ def check_if_same_space(fname_1, fname_2):
     return all(around(q1, dec) == around(q2, dec))
 
 
+#=======================================================================================================================
+# printv
+#=======================================================================================================================
 def printv(string, verbose=1, type='normal'):
     """enables to print color coded messages, depending on verbose status """
 
@@ -661,6 +664,29 @@ def printv(string, verbose=1, type='normal'):
         else:
             print('\n' + filename + traceback.format_exc())
         sys.exit(2)
+
+
+# =======================================================================================================================
+# remove_folder
+# =======================================================================================================================
+def remove_folder(folder_to_remove, remove=1):
+    """
+    Remove folder recursively. Handles error.
+    Parameters
+    ----------
+    folder (str): folder to remove
+    remove {0,1}: 1: remove folder. 0: do nothing.
+
+    Returns
+    -------
+    none
+    """
+    # TODO: manage [Errno 66] Directory not empty, which happens in some home server directories. See: https://github.com/neuropoly/spinalcordtoolbox/issues/1470
+    printv('Removing folder: '+folder_to_remove, 1)
+    try:
+        shutil.rmtree(folder_to_remove, ignore_errors=False)
+    except Exception as e:
+        printv('WARNING: Cannot remove folder:' + folder_to_remove + '\n'+str(e), 1, 'warning')
 
 
 #=======================================================================================================================

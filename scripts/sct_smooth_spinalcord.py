@@ -194,9 +194,7 @@ def main(args=None):
     sct.generate_output_file(path_tmp + '/anat_rpi_straight_smooth_curved_nonzero.nii', file_anat + '_smooth' + ext_anat)
 
     # Remove temporary files
-    if remove_temp_files == 1:
-        print('\nRemove temporary files...')
-        sct.run('rm -rf ' + path_tmp)
+    sct.remove_folder(path_tmp, remove=remove_temp_files)
 
     # Display elapsed time
     elapsed_time = time.time() - start_time
