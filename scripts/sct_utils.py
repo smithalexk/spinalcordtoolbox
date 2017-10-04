@@ -748,20 +748,6 @@ def slash_at_the_end(path, slash=0):
 
 
 #=======================================================================================================================
-# delete_nifti: delete nifti file(s)
-#=======================================================================================================================
-def delete_nifti(fname_in):
-    # extract input file extension
-    path_in, file_in, ext_in = extract_fname(fname_in)
-    # delete nifti if exist
-    if os.path.isfile(path_in + file_in + '.nii'):
-        os.system('rm ' + path_in + file_in + '.nii')
-    # delete nifti if exist
-    if os.path.isfile(path_in + file_in + '.nii.gz'):
-        os.system('rm ' + path_in + file_in + '.nii.gz')
-
-
-#=======================================================================================================================
 # get_interpolation: get correct interpolation field depending on program used. Supported programs: ants, flirt, WarpImageMultiTransform
 #=======================================================================================================================
 def get_interpolation(program, interp):
