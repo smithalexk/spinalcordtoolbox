@@ -331,12 +331,6 @@ class ForkStdoutToFile(object):
         with open(self.filename, "r") as fp:
             fp.read()
 
-    # def send_email(self, email, passwd_from=None, subject="file_log", attachment=True):
-    #     if attachment:
-    #         filename = self.filename
-    #     else:
-    #         filename = None
-    #     send_email(email, passwd_from=passwd_from, subject=subject, message=self.read(), filename=filename)
 
 #=======================================================================================================================
 # extract_fname
@@ -369,11 +363,10 @@ def get_absolute_path(fname):
     else:
         printv('\nERROR: ' + fname + ' does not exist. Exit program.\n', 1, 'error')
 
+
 #=======================================================================================================================
 # check_file_exist:  Check existence of a file or path
 #=======================================================================================================================
-
-
 def check_file_exist(fname, verbose=1):
     if fname[0] == '-':
         # fname should be a warping field that will be inverted, ignore the "-"
@@ -434,11 +427,10 @@ def create_folder(folder):
     else:
         return 1
 
+
 #=======================================================================================================================
 # check_if_3d
 #=======================================================================================================================
-
-
 def check_if_3d(fname):
     """
     Check if input volume is 3d or less.
@@ -452,11 +444,10 @@ def check_if_3d(fname):
     else:
         return True
 
+
 #=======================================================================================================================
 # check_if_rpi:  check if data are in RPI orientation
 #=======================================================================================================================
-
-
 def check_if_rpi(fname):
     from sct_image import get_orientation_3d
     if not get_orientation_3d(fname, filename=True) == 'RPI':
@@ -535,30 +526,6 @@ class TempFolder(object):
         """Remove the created folder and its contents."""
         shutil.rmtree(self.path_tmp, ignore_errors=True)
 
-
-def delete_tmp_files_and_folders(path=''):
-    """
-    This function removes all files that starts with 'tmp.' in the path specified as input. If no path are provided,
-    the current path is selected. The function removes files and directories recursively and handles Exceptions and
-    errors by ignoring them.
-    Args:
-        path: directory in which temporary files and folders must be removed
-
-    Returns:
-
-    """
-    if not path:
-        path = os.getcwd()
-    pattern = os.path.join(path, 'tmp.*')
-
-    for item in glob.glob(pattern):
-        try:
-            if os.path.isdir(item):
-                shutil.rmtree(item, ignore_errors=True)
-            elif os.path.isfile(item):
-                os.remove(item)
-        except:  # in case an exception is raised (e.g., on Windows, if the file is in use)
-            continue
 
 
 #=======================================================================================================================
