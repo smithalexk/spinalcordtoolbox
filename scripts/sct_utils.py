@@ -529,10 +529,10 @@ def create_folder(folder):
 # create temporary folder and return path of tmp dir
 # =======================================================================================================================
 def create_tmp(verbose=1):
-    printv('\nCreate temporary folder...', verbose)
     # import time
     # import random
     import tempfile
+    log.info('Create temporary folder.', verbose)
     path_tmp = tempfile.mkstemp(suffix="", prefix='sct.')
     # path_tmp = slash_at_the_end('tmp.' + time.strftime("%y%m%d%H%M%S") + '_' + str(random.randint(1, 1000000)), 1)
     # create directory

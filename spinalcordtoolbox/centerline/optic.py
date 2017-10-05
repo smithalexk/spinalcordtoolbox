@@ -1,20 +1,15 @@
 import os
 import shutil
-
 import nibabel as nib
-
-import numpy as np
-
 import sct_utils as sct
 import sct_image
 from sct_image import orientation
 from msct_image import Image
-
+from sct_convert import convert
 from datetime import datetime
-from string import Template
 
 
-def centerline2roi(fname_image, folder_output='./', verbose=0):
+def centerline2roi(fname_image, folder_output='', verbose=0):
     """
     Tis method converts a binary centerline image to a .roi centerline file
 
@@ -88,59 +83,68 @@ def detect_centerline(image_fname, contrast_type,
     sct.printv('Detecting the spinal cord using OptiC', verbose=verbose)
     image_input_orientation = orientation(image_input, get=True, verbose=False)
 
-    temp_folder = sct.TempFolder()
-    temp_folder.copy_from(image_fname)
-    temp_folder.chdir()
+    # create temp folder
+    path_tmp = sct.create_tmp()
+    # temp_folder = sct.TempFolder()
+
+    # copy image to temp folder
+    sct.printv('\nCopying input data to tmp folder and convert to nii...', verbose)
+    convert(image_fname, path_tmp + 'data.nii')
+
+    # go to temp folder
+    path_cwd = os.getcwd()
+    os.chdir(path_tmp)
+
+    # define output folder
+    # TODO
+    path_out = path_cwd
 
     # convert image data type to int16, as required by opencv (backend in OptiC)
-    image_int_filename = sct.add_suffix(file_data + ext_data, "_int16")
-    sct_image.main(args=['-i', image_fname, '-type', 'int16', '-o', image_int_filename])
+    sct_image.main(args=['-i', 'data.nii', '-type', 'int16', '-o', 'data_int16.nii'])
 
-    # reorient the input image to RPI + convert to .nii
-    reoriented_image_filename = sct.add_suffix(image_int_filename, "_RPI")
-    img_filename = ''.join(sct.extract_fname(reoriented_image_filename)[:2])
-    reoriented_image_filename_nii = img_filename + '.nii'
-    cmd_reorient = 'sct_image -i "%s" -o "%s" -setorient RPI -v 0' % \
-                (image_int_filename, reoriented_image_filename_nii)
-    sct.run(cmd_reorient, verbose=0)
+    # reorient the input image to RPI
+    sct_image.main(args=['-i', 'data_int16.nii', '-o', 'data_int16_RPI.nii', '-setorient', 'RPI'])
 
-    image_rpi_init = Image(reoriented_image_filename_nii)
+    # open image
+    image_rpi_init = Image('data_int16_RPI.nii')
     nxr, nyr, nzr, ntr, pxr, pyr, pzr, ptr = image_rpi_init.dim
     if init_option is not None:
         if init_option > 1:
             init_option /= (nzr - 1)
 
     # call the OptiC method to generate the spinal cord centerline
-    optic_input = img_filename
-    optic_filename = img_filename + '_optic'
+    # optic_input = img_filename
+    # optic_filename = img_filename + '_optic'
 
     os.environ["FSLOUTPUTTYPE"] = "NIFTI_PAIR"
     cmd_optic = 'isct_spine_detect -ctype=dpdt -lambda=1 "%s" "%s" "%s"' % \
-                (optic_models_path, optic_input, optic_filename)
+                (optic_models_path, 'data_int16_RPI.nii', 'data_int16_RPI_optic')
     sct.run(cmd_optic, verbose=0)
 
     # convert .img and .hdr files to .nii.gz
-    optic_hdr_filename = img_filename + '_optic_ctr.hdr'
-    centerline_optic_RPI_filename = sct.add_suffix(file_data + ext_data,
-                                                   "_centerline_optic_RPI")
-    img = nib.load(optic_hdr_filename)
-    nib.save(img, centerline_optic_RPI_filename)
+    # optic_hdr_filename = img_filename + '_optic_ctr.hdr'
+    # centerline_optic_RPI_filename = sct.add_suffix(file_data + ext_data,
+    #                                                "_centerline_optic_RPI")
+    img = nib.load('data_int16_RPI_optic_ctr.hdr')
+    nib.save(img, 'data_int16_RPI_centerline_optic_RPI.nii.gz')
 
     # reorient the output image to initial orientation
-    centerline_optic_filename = sct.add_suffix(file_data + ext_data, "_centerline_optic")
-    cmd_reorient = 'sct_image -i "%s" -o "%s" -setorient "%s" -v 0' % \
-                   (centerline_optic_RPI_filename,
-                    centerline_optic_filename,
-                    image_input_orientation)
-    sct.run(cmd_reorient, verbose=0)
+    # centerline_optic_filename = sct.add_suffix(file_data + ext_data, "_centerline_optic")
+    # cmd_reorient = 'sct_image -i "%s" -o "%s" -setorient "%s" -v 0' % \
+    #                ('data_int16_RPI_centerline_optic_RPI.nii.gz',
+    #                 'data_int16_RPI_centerline_optic.nii.gz',
+    #                 image_input_orientation)
+    # sct.run(cmd_reorient, verbose=0)
+
+    sct_image.main(args=['-i', 'data_int16_RPI_centerline_optic_RPI.nii', '-o', 'data_int16_RPI_centerline_optic.nii', '-setorient', image_input_orientation])
 
     # copy centerline to parent folder
-    folder_output_from_temp = folder_output
-    if not os.path.isabs(folder_output):
-        folder_output_from_temp = '../' + folder_output
+    # folder_output_from_temp = folder_output
+    # if not os.path.isabs(folder_output):
+    #     folder_output_from_temp = '../' + folder_output
 
     sct.printv('Copy output to ' + folder_output, verbose=0)
-    shutil.copy(centerline_optic_filename, folder_output_from_temp)
+    shutil.copy('data_int16_RPI_centerline_optic.nii', path_out)
 
     if output_roi:
         fname_roi_centerline = centerline2roi(fname_image=centerline_optic_RPI_filename,
@@ -155,7 +159,6 @@ def detect_centerline(image_fname, contrast_type,
     temp_folder.chdir_undo()
 
     # delete temporary folder
-    if remove_temp_files:
-        temp_folder.cleanup()
+    sct.remove_folder(path_tmp, remove_temp_files)
 
     return init_option, os.path.join(folder_output, centerline_optic_filename)
