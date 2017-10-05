@@ -681,12 +681,13 @@ def remove_folder(folder_to_remove, remove=1):
     -------
     none
     """
-    # TODO: manage [Errno 66] Directory not empty, which happens in some home server directories. See: https://github.com/neuropoly/spinalcordtoolbox/issues/1470
-    printv('Removing folder: '+folder_to_remove, 1)
-    try:
-        shutil.rmtree(folder_to_remove, ignore_errors=False)
-    except Exception as e:
-        printv('WARNING: Cannot remove folder:' + folder_to_remove + '\n'+str(e), 1, 'warning')
+    if remove == 1:
+        # TODO: manage [Errno 66] Directory not empty, which happens in some home server directories. See: https://github.com/neuropoly/spinalcordtoolbox/issues/1470
+        printv('Removing folder: '+folder_to_remove, 1)
+        try:
+            shutil.rmtree(folder_to_remove, ignore_errors=False)
+        except Exception as e:
+            printv('WARNING: Cannot remove folder:' + folder_to_remove + '\n'+str(e), 1, 'warning')
 
 
 #=======================================================================================================================
