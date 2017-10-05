@@ -21,9 +21,8 @@ from msct_parser import Parser
 from msct_types import Centerline
 from sct_image import get_orientation, set_orientation
 from sct_straighten_spinalcord import smooth_centerline
-from sct_utils import extract_fname, printv, slash_at_the_end, create_tmp
 from skimage.measure import label
-
+import sct_utils as sct
 
 def get_parser():
     # Initialize the parser
@@ -91,22 +90,22 @@ class AnalyzeLesion:
 
         if not set(np.unique(Image(fname_mask).data)) == set([0.0, 1.0]):
             if set(np.unique(Image(fname_mask).data)) == set([0.0]):
-                printv('WARNING: Empty masked image', self.verbose, 'warning')
+                sct.printv('WARNING: Empty masked image', self.verbose, 'warning')
             else:
-                printv("ERROR input file %s is not binary file with 0 and 1 values" % fname_mask, 1, 'error')
+                sct.printv("ERROR input file %s is not binary file with 0 and 1 values" % fname_mask, 1, 'error')
 
 
         # create tmp directory
-        self.tmp_dir = create_tmp(verbose=verbose)  # path to tmp directory
+        self.tmp_dir = sct.create_tmp(verbose=verbose)  # path to tmp directory
 
         # lesion file where each lesion has a different value
-        self.fname_label = extract_fname(self.fname_mask)[1] + '_label' + extract_fname(self.fname_mask)[2]
+        self.fname_label = sct.extract_fname(self.fname_mask)[1] + '_label' + sct.extract_fname(self.fname_mask)[2]
 
         # initialization of measure sheet
         measure_lst = ['label', 'volume [mm3]', 'length [mm]', 'max_equivalent_diameter [mm]']
         if self.fname_ref is not None:
             for measure in ['mean', 'std']:
-                measure_lst.append(measure + '_' + extract_fname(self.fname_ref)[1])
+                measure_lst.append(measure + '_' + sct.extract_fname(self.fname_ref)[1])
         measure_dct = {}
         for column in measure_lst:
             measure_dct[column] = None
@@ -132,8 +131,8 @@ class AnalyzeLesion:
         self.distrib_matrix_dct = {}
 
         # output names
-        self.pickle_name = extract_fname(self.fname_mask)[1] + '_analyzis.pkl'
-        self.excel_name = extract_fname(self.fname_mask)[1] + '_analyzis.xls'
+        self.pickle_name = sct.extract_fname(self.fname_mask)[1] + '_analyzis.pkl'
+        self.excel_name = sct.extract_fname(self.fname_mask)[1] + '_analyzis.xls'
 
     def analyze(self):
         self.ifolder2tmp()
@@ -167,10 +166,10 @@ class AnalyzeLesion:
     def tmp2ofolder(self):
         os.chdir(self.wrk_dir)  # go back to working directory
 
-        printv('\nSave results files...', self.verbose, 'normal')
-        printv('\n... measures saved in the files:', self.verbose, 'normal')
+        sct.printv('\nSave results files...', self.verbose, 'normal')
+        sct.printv('\n... measures saved in the files:', self.verbose, 'normal')
         for file_ in [self.fname_label, self.excel_name, self.pickle_name]:
-            printv('\n  - ' + self.path_ofolder + file_, self.verbose, 'normal')
+            sct.printv('\n  - ' + self.path_ofolder + file_, self.verbose, 'normal')
             shutil.copy(self.tmp_dir + file_, self.path_ofolder + file_)
 
     def pack_measures(self):
@@ -198,20 +197,20 @@ class AnalyzeLesion:
         writer.save()
 
     def show_total_results(self):
-        printv('\n\nAveraged measures...', self.verbose, 'normal')
+        sct.printv('\n\nAveraged measures...', self.verbose, 'normal')
         for stg, key in zip(['  Volume [mm^3] = ', '  (S-I) Length [mm] = ', '  Equivalent Diameter [mm] = '], ['volume [mm3]', 'length [mm]', 'max_equivalent_diameter [mm]']):
-            printv(stg + str(round(np.mean(self.measure_pd[key]), 2)) + '+/-' + str(round(np.std(self.measure_pd[key]), 2)), self.verbose, type='info')
+            sct.printv(stg + str(round(np.mean(self.measure_pd[key]), 2)) + '+/-' + str(round(np.std(self.measure_pd[key]), 2)), self.verbose, type='info')
 
-        printv('\nTotal volume = ' + str(round(np.sum(self.measure_pd['volume [mm3]']), 2)) + ' mm^3', self.verbose, 'info')
-        printv('Lesion count = ' + str(len(self.measure_pd['volume [mm3]'].values)), self.verbose, 'info')
+        sct.printv('\nTotal volume = ' + str(round(np.sum(self.measure_pd['volume [mm3]']), 2)) + ' mm^3', self.verbose, 'info')
+        sct.printv('Lesion count = ' + str(len(self.measure_pd['volume [mm3]'].values)), self.verbose, 'info')
 
     def reorient(self):
         if not self.orientation == 'RPI':
-            printv('\nOrient output image to initial orientation...', self.verbose, 'normal')
+            sct.printv('\nOrient output image to initial orientation...', self.verbose, 'normal')
             self._orient(self.fname_label, self.orientation)
 
     def _measure_within_im(self, im_lesion, im_ref, label_lst):
-        printv('\nCompute reference image features...', self.verbose, 'normal')
+        sct.printv('\nCompute reference image features...', self.verbose, 'normal')
 
         for lesion_label in label_lst:
             im_label_data_cur = im_lesion == lesion_label
@@ -219,9 +218,9 @@ class AnalyzeLesion:
             mean_cur, std_cur = np.mean(im_ref[np.where(im_label_data_cur)]), np.std(im_ref[np.where(im_label_data_cur)])
 
             label_idx = self.measure_pd[self.measure_pd.label == lesion_label].index
-            self.measure_pd.loc[label_idx, 'mean_' + extract_fname(self.fname_ref)[1]] = mean_cur
-            self.measure_pd.loc[label_idx, 'std_' + extract_fname(self.fname_ref)[1]] = std_cur
-            printv('Mean+/-std of lesion #' + str(lesion_label) + ' in ' + extract_fname(self.fname_ref)[1] + ' file: ' + str(round(mean_cur, 2)) + '+/-' + str(round(std_cur, 2)), self.verbose, type='info')
+            self.measure_pd.loc[label_idx, 'mean_' + sct.extract_fname(self.fname_ref)[1]] = mean_cur
+            self.measure_pd.loc[label_idx, 'std_' + sct.extract_fname(self.fname_ref)[1]] = std_cur
+            sct.printv('Mean+/-std of lesion #' + str(lesion_label) + ' in ' + sct.extract_fname(self.fname_ref)[1] + ' file: ' + str(round(mean_cur, 2)) + '+/-' + str(round(std_cur, 2)), self.verbose, type='info')
 
     def _measure_volume(self, im_data, p_lst, idx):
         for zz in range(im_data.shape[2]):
@@ -229,18 +228,18 @@ class AnalyzeLesion:
 
         vol_tot_cur = np.sum(self.volumes[:, idx - 1])
         self.measure_pd.loc[idx, 'volume [mm3]'] = vol_tot_cur
-        printv('  Volume : ' + str(round(vol_tot_cur, 2)) + ' mm^3', self.verbose, type='info')
+        sct.printv('  Volume : ' + str(round(vol_tot_cur, 2)) + ' mm^3', self.verbose, type='info')
 
     def _measure_length(self, im_data, p_lst, idx):
         length_cur = np.sum([np.cos(self.angles[zz]) * p_lst[2] for zz in np.unique(np.where(im_data)[2])])
         self.measure_pd.loc[idx, 'length [mm]'] = length_cur
-        printv('  (S-I) length : ' + str(round(length_cur, 2)) + ' mm', self.verbose, type='info')
+        sct.printv('  (S-I) length : ' + str(round(length_cur, 2)) + ' mm', self.verbose, type='info')
 
     def _measure_diameter(self, im_data, p_lst, idx):
         area_lst = [np.sum(im_data[:, :, zz]) * np.cos(self.angles[zz]) * p_lst[0] * p_lst[1] for zz in range(im_data.shape[2])]
         diameter_cur = 2 * sqrt(max(area_lst) / (4 * pi))
         self.measure_pd.loc[idx, 'max_equivalent_diameter [mm]'] = diameter_cur
-        printv('  Max. equivalent diameter : ' + str(round(diameter_cur, 2)) + ' mm', self.verbose, type='info')
+        sct.printv('  Max. equivalent diameter : ' + str(round(diameter_cur, 2)) + ' mm', self.verbose, type='info')
 
     def ___pve_weighted_avg(self, im_mask_data, im_atlas_data):
         return im_mask_data * im_atlas_data
@@ -354,7 +353,7 @@ class AnalyzeLesion:
 
             else:
                 im_vert_data = None
-                printv('ERROR: the file ' + self.path_levels + ' does not exist. Please make sure the template was correctly registered and warped (sct_register_to_template or sct_register_multimodal and sct_warp_template)', type='error')
+                sct.printv('ERROR: the file ' + self.path_levels + ' does not exist. Please make sure the template was correctly registered and warped (sct_register_to_template or sct_register_multimodal and sct_warp_template)', type='error')
 
             # In order to open atlas images only one time
             atlas_data_dct = {}  # dict containing the np.array of the registrated atlas
@@ -370,7 +369,7 @@ class AnalyzeLesion:
         # iteration across each lesion to measure statistics
         for lesion_label in label_lst:
             im_lesion_data_cur = np.copy(im_lesion_data == lesion_label)
-            printv('\nMeasures on lesion #' + str(lesion_label) + '...', self.verbose, 'normal')
+            sct.printv('\nMeasures on lesion #' + str(lesion_label) + '...', self.verbose, 'normal')
 
             label_idx = self.measure_pd[self.measure_pd.label == lesion_label].index
             self._measure_volume(im_lesion_data_cur, p_lst, label_idx)
@@ -429,11 +428,11 @@ class AnalyzeLesion:
                     # compute the angle between the normal vector of the plane and the vector z
                     self.angles[zz] = np.arccos(np.vdot(tangent_vect, axis_Z))
                 except IndexError:
-                    printv('WARNING: Your segmentation does not seem continuous, which could cause wrong estimations at the problematic slices. Please check it, especially at the extremities.', type='warning')
-                    
+                    sct.printv('WARNING: Your segmentation does not seem continuous, which could cause wrong estimations at the problematic slices. Please check it, especially at the extremities.', type='warning')
+
 
     def label_lesion(self):
-        printv('\nLabel connected regions of the masked image...', self.verbose, 'normal')
+        sct.printv('\nLabel connected regions of the masked image...', self.verbose, 'normal')
         im = Image(self.fname_mask)
         im_2save = im.copy()
         im_2save.data = label(im.data, connectivity=2)
@@ -441,7 +440,7 @@ class AnalyzeLesion:
         im_2save.save()
 
         self.measure_pd['label'] = [l for l in np.unique(im_2save.data) if l]
-        printv('Lesion count = ' + str(len(self.measure_pd['label'])), self.verbose, 'info')
+        sct.printv('Lesion count = ' + str(len(self.measure_pd['label'])), self.verbose, 'info')
 
     def _orient(self, fname, orientation):
         im = Image(fname)
@@ -452,7 +451,7 @@ class AnalyzeLesion:
         self.orientation = get_orientation(Image(self.fname_mask))
 
         if not self.orientation == 'RPI':
-            printv('\nOrient input image(s) to RPI orientation...', self.verbose, 'normal')
+            sct.printv('\nOrient input image(s) to RPI orientation...', self.verbose, 'normal')
             self._orient(self.fname_mask, 'RPI')
 
             if self.fname_sc is not None:
@@ -468,24 +467,24 @@ class AnalyzeLesion:
         # copy input image
         if self.fname_mask is not None:
             shutil.copy(self.fname_mask, self.tmp_dir)
-            self.fname_mask = ''.join(extract_fname(self.fname_mask)[1:])
+            self.fname_mask = ''.join(sct.extract_fname(self.fname_mask)[1:])
         else:
-            printv('ERROR: No input image', self.verbose, 'error')
+            sct.printv('ERROR: No input image', self.verbose, 'error')
 
         # copy seg image
         if self.fname_sc is not None:
             shutil.copy(self.fname_sc, self.tmp_dir)
-            self.fname_sc = ''.join(extract_fname(self.fname_sc)[1:])
+            self.fname_sc = ''.join(sct.extract_fname(self.fname_sc)[1:])
 
         # copy ref image
         if self.fname_ref is not None:
             shutil.copy(self.fname_ref, self.tmp_dir)
-            self.fname_ref = ''.join(extract_fname(self.fname_ref)[1:])
+            self.fname_ref = ''.join(sct.extract_fname(self.fname_ref)[1:])
 
         # copy registered template
         if self.path_template is not None:
             shutil.copy(self.path_levels, self.tmp_dir)
-            self.path_levels = ''.join(extract_fname(self.path_levels)[1:])
+            self.path_levels = ''.join(sct.extract_fname(self.path_levels)[1:])
 
             self.atlas_roi_lst = []
             for fname_atlas_roi in os.listdir(self.path_atlas):
@@ -514,7 +513,7 @@ def main(args=None):
         fname_sc = arguments["-s"]
         if not os.path.isfile(fname_sc):
             fname_sc = None
-            printv('WARNING: -s input file: "' + arguments['-s'] + '" does not exist.\n', 1, 'warning')
+            sct.printv('WARNING: -s input file: "' + arguments['-s'] + '" does not exist.\n', 1, 'warning')
     else:
         fname_sc = None
 
@@ -523,24 +522,24 @@ def main(args=None):
         fname_ref = arguments["-i"]
         if not os.path.isfile(fname_sc):
             fname_ref = None
-            printv('WARNING: -i input file: "' + arguments['-i'] + '" does not exist.\n', 1, 'warning')
+            sct.printv('WARNING: -i input file: "' + arguments['-i'] + '" does not exist.\n', 1, 'warning')
     else:
         fname_ref = None
 
     # Path to template
     if '-f' in arguments:
-        path_template = slash_at_the_end(arguments["-f"], slash=1)
+        path_template = sct.slash_at_the_end(arguments["-f"], slash=1)
         if not os.path.isdir(path_template) and os.path.exists(path_template):
             path_template = None
-            printv("ERROR output directory %s is not a valid directory" % path_template, 1, 'error')
+            sct.printv("ERROR output directory %s is not a valid directory" % path_template, 1, 'error')
     else:
         path_template = None
 
     # Output Folder
     if '-ofolder' in arguments:
-        path_results = slash_at_the_end(arguments["-ofolder"], slash=1)
+        path_results = sct.slash_at_the_end(arguments["-ofolder"], slash=1)
         if not os.path.isdir(path_results) and os.path.exists(path_results):
-            printv("ERROR output directory %s is not a valid directory" % path_results, 1, 'error')
+            sct.printv("ERROR output directory %s is not a valid directory" % path_results, 1, 'error')
         if not os.path.exists(path_results):
             os.makedirs(path_results)
     else:
@@ -573,11 +572,11 @@ def main(args=None):
     if rm_tmp:
         shutil.rmtree(lesion_obj.tmp_dir)
 
-    printv('\nDone! To view the labeled lesion file (one value per lesion), type:', verbose)
+    sct.printv('\nDone! To view the labeled lesion file (one value per lesion), type:', verbose)
     if fname_ref is not None:
-        printv('fslview ' + fname_mask + ' ' + path_results + lesion_obj.fname_label + ' -l Red-Yellow -t 0.7 & \n', verbose, 'info')
+        sct.printv('fslview ' + fname_mask + ' ' + path_results + lesion_obj.fname_label + ' -l Red-Yellow -t 0.7 & \n', verbose, 'info')
     else:
-        printv('fslview ' + path_results + lesion_obj.fname_label + ' -l Red-Yellow -t 0.7 & \n', verbose, 'info')
+        sct.printv('fslview ' + path_results + lesion_obj.fname_label + ' -l Red-Yellow -t 0.7 & \n', verbose, 'info')
 
 
 if __name__ == "__main__":
