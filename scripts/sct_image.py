@@ -16,7 +16,7 @@ import sys
 from msct_image import Image, get_dimension
 from msct_parser import Parser
 from numpy import newaxis, shape
-from sct_utils import add_suffix, extract_fname, printv, run, tmp_create
+from sct_utils import add_suffix, extract_fname, printv, run, create_tmp
 
 
 class Param:
@@ -588,7 +588,7 @@ def orientation(im, ori=None, set=False, get=False, set_data=False, verbose=1, f
         # 4D data: split along T dimension
         # or 5D data: split along 5th dimension
         # Create a temporary directory and go in it
-        tmp_folder = tmp_create(verbose)
+        tmp_folder = create_tmp(verbose)
         chdir(tmp_folder)
         if len(im.data.shape) == 5 and im.data.shape[-1] not in [0, 1]:
             # 5D data
@@ -719,7 +719,7 @@ def set_orientation(im, orientation, data_inversion=False, filename=False, fname
 def visualize_warp(fname_warp, fname_grid=None, step=3, rm_tmp=True):
     if fname_grid is None:
         from numpy import zeros
-        tmp_dir = tmp_create()
+        tmp_dir = create_tmp()
         im_warp = Image(fname_warp)
         status, out = run('fslhd ' + fname_warp)
         from os import chdir

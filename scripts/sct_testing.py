@@ -92,7 +92,7 @@ def main(args=None):
     sct.printv('\nPath to testing data: ' + param.path_data, param.verbose)
 
     # create temp folder that will have all results and go in it
-    param.path_tmp = sct.tmp_create()
+    param.path_tmp = sct.create_tmp()
     os.chdir(param.path_tmp)
 
     # get list of all scripts to test

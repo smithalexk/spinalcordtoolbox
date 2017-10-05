@@ -119,7 +119,7 @@ def create_mask():
 
     # create temporary folder
     sct.printv('\nCreate temporary folder...', param.verbose)
-    path_tmp = sct.tmp_create(param.verbose)
+    path_tmp = sct.create_tmp(param.verbose)
     # )sct.slash_at_the_end('tmp.'+time.strftime("%y%m%d%H%M%S"), 1)
     # sct.run('mkdir '+path_tmp, param.verbose)
 

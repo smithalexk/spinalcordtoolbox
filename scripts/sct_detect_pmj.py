@@ -20,7 +20,7 @@ import commands
 
 from msct_image import Image
 from msct_parser import Parser
-from sct_utils import tmp_create, extract_fname, slash_at_the_end, printv, run
+from sct_utils import create_tmp, extract_fname, slash_at_the_end, printv, run
 from sct_image import get_orientation, set_orientation
 
 
@@ -88,7 +88,7 @@ class DetectPMJ:
 
         self.verbose = verbose
 
-        self.tmp_dir = tmp_create(verbose=self.verbose)  # path to tmp directory
+        self.tmp_dir = create_tmp(verbose=self.verbose)  # path to tmp directory
 
         self.orientation_im = get_orientation(Image(self.fname_im))  # to re-orient the data at the end
 

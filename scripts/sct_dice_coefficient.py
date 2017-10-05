@@ -87,7 +87,7 @@ if __name__ == "__main__":
     if verbose == '0':
         cmd += ' -v '
 
-    tmp_dir = sct.tmp_create(verbose=verbose)  # create tmp directory
+    tmp_dir = sct.create_tmp(verbose=verbose)  # create tmp directory
     tmp_dir = os.path.abspath(tmp_dir)
 
     # copy input files to tmp directory

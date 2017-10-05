@@ -385,7 +385,7 @@ def main(args=None):
     sct.create_folder(param.path_qc)
 
     # create temporary folder
-    path_tmp = sct.tmp_create()
+    path_tmp = sct.create_tmp()
 
     # copy files to temporary folder
     from sct_convert import convert

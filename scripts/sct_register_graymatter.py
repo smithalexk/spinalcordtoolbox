@@ -96,7 +96,7 @@ class MultiLabelRegistration:
         im_template_ml.setFileName(fname_template_ml)
 
         # Create temporary folder and put files in it
-        tmp_dir = sct.tmp_create()
+        tmp_dir = sct.create_tmp()
 
         path_gm, file_gm, ext_gm = sct.extract_fname(fname_gm)
         path_warp_template2target, file_warp_template2target, ext_warp_template2target = sct.extract_fname(self.fname_warp_template2target)
@@ -189,7 +189,7 @@ class MultiLabelRegistration:
         path_sc_seg, file_sc_seg, ext_sc_seg = sct.extract_fname(fname_sc_seg)
 
         # Create tmp folder and copy files in it
-        tmp_dir = sct.tmp_create()
+        tmp_dir = sct.create_tmp()
         sct.run('cp ' + fname_manual_gmseg + ' ' + tmp_dir + file_manual_gmseg + ext_manual_gmseg)
         sct.run('cp ' + fname_sc_seg + ' ' + tmp_dir + file_sc_seg + ext_sc_seg)
         sct.run('cp ' + self.param.output_folder + self.fname_warp_template2gm + ' ' + tmp_dir + self.fname_warp_template2gm)
@@ -395,7 +395,7 @@ def pad_im(fname_im, nx_full, ny_full, nz_full,  xi, xf, yi, yf, zi, zf):
 def visualize_warp(fname_warp, fname_grid=None, step=3, rm_tmp=True):
     if fname_grid is None:
         from numpy import zeros
-        tmp_dir = sct.tmp_create()
+        tmp_dir = sct.create_tmp()
         im_warp = Image(fname_warp)
         os.chdir(tmp_dir)
 

@@ -226,7 +226,7 @@ def main(args=None):
 
     # create temporary folder
     sct.printv('\nCreate temporary folder...', verbose)
-    path_tmp = sct.tmp_create(verbose=verbose)
+    path_tmp = sct.create_tmp(verbose=verbose)
 
     # Copying input data to tmp folder
     sct.printv('\nCopying input data to tmp folder...', verbose)

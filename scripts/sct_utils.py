@@ -428,6 +428,58 @@ def create_folder(folder):
         return 1
 
 
+# =======================================================================================================================
+# create temporary folder and return path of tmp dir
+# =======================================================================================================================
+def create_tmp(verbose=1):
+    printv('\nCreate temporary folder...', verbose)
+    import time
+    import random
+    path_tmp = slash_at_the_end('tmp.' + time.strftime("%y%m%d%H%M%S") + '_' + str(random.randint(1, 1000000)), 1)
+    # create directory
+    try:
+        os.makedirs(path_tmp)
+    except OSError:
+        if not os.path.isdir(path_tmp):
+            raise
+    return path_tmp
+
+
+class TempFolder(object):
+    # TODO: remove this (only used by sct_get_centerline)
+    """This class will create a temporary folder."""
+
+    def __init__(self, verbose=0):
+        self.path_tmp = create_tmp(verbose)
+        self.previous_path = None
+
+    def chdir(self):
+        """This method will change the working directory to the temporary folder."""
+        self.previous_path = os.getcwd()
+        os.chdir(self.path_tmp)
+
+    def chdir_undo(self):
+        """This method will return to the previous working directory, the directory
+        that was the state before calling the chdir() method."""
+        if self.previous_path is not None:
+            os.chdir(self.previous_path)
+
+    def get_path(self):
+        """Return the temporary folder path."""
+        return self.path_tmp
+
+    def copy_from(self, filename):
+        """This method will copy a specified file to the temporary folder.
+
+        :param filename: The filename to copy into the folder.
+        """
+        shutil.copy(filename, self.path_tmp)
+
+    def cleanup(self):
+        """Remove the created folder and its contents."""
+        shutil.rmtree(self.path_tmp, ignore_errors=True)
+
+
 #=======================================================================================================================
 # check_if_3d
 #=======================================================================================================================
@@ -474,58 +526,6 @@ def find_file_within_folder(fname, directory, seek_type='file'):
                 if fnmatch.fnmatch(file, fname):
                     all_path.append(os.path.join(root, file))
     return all_path
-
-
-#=======================================================================================================================
-# create temporary folder and return path of tmp dir
-#=======================================================================================================================
-def tmp_create(verbose=1):
-    printv('\nCreate temporary folder...', verbose)
-    import time
-    import random
-    path_tmp = slash_at_the_end('tmp.' + time.strftime("%y%m%d%H%M%S") + '_' + str(random.randint(1, 1000000)), 1)
-    # create directory
-    try:
-        os.makedirs(path_tmp)
-    except OSError:
-        if not os.path.isdir(path_tmp):
-            raise
-    return path_tmp
-
-
-class TempFolder(object):
-    """This class will create a temporary folder."""
-
-    def __init__(self, verbose=0):
-        self.path_tmp = tmp_create(verbose)
-        self.previous_path = None
-
-    def chdir(self):
-        """This method will change the working directory to the temporary folder."""
-        self.previous_path = os.getcwd()
-        os.chdir(self.path_tmp)
-
-    def chdir_undo(self):
-        """This method will return to the previous working directory, the directory
-        that was the state before calling the chdir() method."""
-        if self.previous_path is not None:
-            os.chdir(self.previous_path)
-
-    def get_path(self):
-        """Return the temporary folder path."""
-        return self.path_tmp
-
-    def copy_from(self, filename):
-        """This method will copy a specified file to the temporary folder.
-
-        :param filename: The filename to copy into the folder.
-        """
-        shutil.copy(filename, self.path_tmp)
-
-    def cleanup(self):
-        """Remove the created folder and its contents."""
-        shutil.rmtree(self.path_tmp, ignore_errors=True)
-
 
 
 #=======================================================================================================================

@@ -260,7 +260,7 @@ def main(args=None):
     labels = check_labels(fname_landmarks, label_type=label_type)
 
     # create temporary folder
-    path_tmp = sct.tmp_create(verbose=verbose)
+    path_tmp = sct.create_tmp(verbose=verbose)
 
     # set temporary file names
     ftmp_data = 'data.nii'

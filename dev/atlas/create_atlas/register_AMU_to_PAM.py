@@ -31,7 +31,7 @@ fname_gm = '/Users/julien/Dropbox/Public/sct/PAM50/template/PAM50_gm.nii.gz'
 fname_cord = '/Users/julien/data/sct_dev/PAM50/template/PAM50_cord.nii.gz'
 
 # create temporary folder
-path_tmp = sct.tmp_create()
+path_tmp = sct.create_tmp()
 
 # go to temp folder
 os.chdir(path_tmp)

@@ -50,7 +50,7 @@ def main():
             remove_temp_files = int(arg)
 
     # create temporary folder
-    path_tmp = sct.tmp_create(verbose)
+    path_tmp = sct.create_tmp(verbose)
 
     # go to tmp folder
     os.chdir(path_tmp)

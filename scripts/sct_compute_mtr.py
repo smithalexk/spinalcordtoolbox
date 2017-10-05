@@ -59,7 +59,7 @@ def main():
     path_out, file_out, ext_out = '', file_out, ext_mt0
 
     # create temporary folder
-    path_tmp = sct.tmp_create()
+    path_tmp = sct.create_tmp()
 
     # Copying input data to tmp folder and convert to nii
     sct.printv('\nCopying input data to tmp folder and convert to nii...', verbose)

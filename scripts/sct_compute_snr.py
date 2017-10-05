@@ -103,7 +103,7 @@ def main():
     # If orientation is not RPI, change to RPI
     if input_orient != 'RPI':
         sct.printv('\nCreate temporary folder to change the orientation of the NIFTI files into RPI...', verbose)
-        path_tmp = sct.tmp_create()
+        path_tmp = sct.create_tmp()
         # change orientation and load data
         sct.printv('\nChange input image orientation and load it...', verbose)
         input_im_rpi = orientation(input_im, ori='RPI', set=True, fname_out=path_tmp + 'input_RPI.nii')

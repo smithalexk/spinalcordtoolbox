@@ -112,7 +112,7 @@ def merge_images(list_fname_src, fname_dest, list_fname_warp, param):
     """
 
     # create temporary folder
-    path_tmp = sct.tmp_create()
+    path_tmp = sct.create_tmp()
 
     # get dimensions of destination file
     nii_dest = msct_image.Image(fname_dest)

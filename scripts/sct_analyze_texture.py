@@ -20,7 +20,7 @@ from msct_image import Image
 from msct_parser import Parser
 from sct_image import set_orientation, get_orientation
 from sct_utils import (add_suffix, extract_fname, printv, run,
-                       slash_at_the_end, Timer, tmp_create)
+                       slash_at_the_end, Timer, create_tmp)
 
 
 def get_parser():
@@ -89,7 +89,7 @@ class ExtractGLCM:
         self.param_glcm = param_glcm if param_glcm is not None else ParamGLCM()
 
         # create tmp directory
-        self.tmp_dir = tmp_create(verbose=self.param.verbose)  # path to tmp directory
+        self.tmp_dir = create_tmp(verbose=self.param.verbose)  # path to tmp directory
 
         if self.param.dim == 'ax':
             self.orientation_extraction = 'RPI'

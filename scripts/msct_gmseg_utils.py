@@ -13,7 +13,7 @@
 ########################################################################################################################
 from msct_image import Image
 from sct_image import set_orientation
-from sct_utils import extract_fname, printv, add_suffix, tmp_create
+from sct_utils import extract_fname, printv, add_suffix, create_tmp
 from sct_crop_image import ImageCropper
 import sct_create_mask
 import sct_register_multimodal, sct_apply_transfo
@@ -438,7 +438,7 @@ def register_data(im_src, im_dest, param_reg, path_copy_warp=None, rm_tmp=True):
     im_src_seg = binarize(im_src, thr_min=1, thr_max=1)
     im_dest_seg = binarize(im_dest)
     # create tmp dir and go in it
-    tmp_dir = tmp_create()
+    tmp_dir = create_tmp()
     os.chdir(tmp_dir)
     # save image and seg
     fname_src = 'src.nii.gz'
@@ -483,7 +483,7 @@ def register_data(im_src, im_dest, param_reg, path_copy_warp=None, rm_tmp=True):
 
 def apply_transfo(im_src, im_dest, warp, interp='spline', rm_tmp=True):
     # create tmp dir and go in it
-    tmp_dir = tmp_create()
+    tmp_dir = create_tmp()
     # copy warping field to tmp dir
     shutil.copy(warp, tmp_dir)
     warp = ''.join(extract_fname(warp)[1:])

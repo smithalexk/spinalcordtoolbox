@@ -21,7 +21,7 @@ from msct_parser import Parser
 from msct_types import Centerline
 from sct_image import get_orientation, set_orientation
 from sct_straighten_spinalcord import smooth_centerline
-from sct_utils import extract_fname, printv, slash_at_the_end, tmp_create
+from sct_utils import extract_fname, printv, slash_at_the_end, create_tmp
 from skimage.measure import label
 
 
@@ -97,7 +97,7 @@ class AnalyzeLeion:
 
 
         # create tmp directory
-        self.tmp_dir = tmp_create(verbose=verbose)  # path to tmp directory
+        self.tmp_dir = create_tmp(verbose=verbose)  # path to tmp directory
 
         # lesion file where each lesion has a different value
         self.fname_label = extract_fname(self.fname_mask)[1] + '_label' + extract_fname(self.fname_mask)[2]

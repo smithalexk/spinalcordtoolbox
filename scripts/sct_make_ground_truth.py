@@ -297,7 +297,7 @@ def use_viewer_to_define_labels(fname_data,first_label,nb_of_slices_to_mean):
 
     image_input_orientation = sct_image.orientation(image_input, get=True, verbose=False)
     reoriented_image_filename = 'reoriented_image_source.nii.gz'
-    path_tmp_viewer = sct.tmp_create(verbose=False)
+    path_tmp_viewer = sct.create_tmp(verbose=False)
     cmd_image = 'sct_image -i "%s" -o "%s" -setorient SAL -v 0' % (
     fname_data, reoriented_image_filename)
     sct.run(cmd_image, verbose=False)
@@ -360,7 +360,7 @@ def main():
     labels = check_labels(fname_landmarks)
 
     """ Create temporary folder, set temporary file names, copy files into it and go in it """
-    path_tmp = sct.tmp_create(verbose=verbose)
+    path_tmp = sct.create_tmp(verbose=verbose)
     (ftmp_data, ftmp_seg, ftmp_label, ftmp_template, ftmp_template_seg, ftmp_template_label)=set_temporary_files()
     copy_files_to_temporary_files(verbose, fname_data, path_tmp, ftmp_seg, ftmp_data, fname_seg, fname_landmarks,
                                   ftmp_label, fname_template, ftmp_template, fname_template_seg, ftmp_template_seg)

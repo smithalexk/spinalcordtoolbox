@@ -59,7 +59,7 @@ from msct_multiatlas_seg import Model, Param, ParamData, ParamModel
 from msct_parser import Parser
 from sct_image import set_orientation
 from sct_utils import (add_suffix, extract_fname, printv, run,
-                       slash_at_the_end, tmp_create)
+                       slash_at_the_end, create_tmp)
 
 
 def get_parser():
@@ -220,7 +220,7 @@ class SegmentGM:
         self.model = Model(param_model=self.param_model, param_data=self.param_data, param=self.param)
 
         # create tmp directory
-        self.tmp_dir = tmp_create(verbose=self.param.verbose)  # path to tmp directory
+        self.tmp_dir = create_tmp(verbose=self.param.verbose)  # path to tmp directory
 
         self.target_im = None  # list of slices
         self.info_preprocessing = None  # dic containing {'orientation': 'xxx', 'im_sc_seg_rpi': im, 'interpolated_images': [list of im = interpolated image data per slice]}

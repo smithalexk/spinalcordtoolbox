@@ -40,7 +40,7 @@ def register_slicewise(fname_src,
                         verbose=0):
 
     # create temporary folder
-    path_tmp = sct.tmp_create(verbose)
+    path_tmp = sct.create_tmp(verbose)
 
     # copy data to temp folder
     sct.printv('\nCopy input data to temp folder...', verbose)

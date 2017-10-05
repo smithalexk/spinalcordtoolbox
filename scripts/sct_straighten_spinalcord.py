@@ -254,7 +254,7 @@ class SpinalCordStraightener(object):
         path_centerline, file_centerline, ext_centerline = sct.extract_fname(fname_centerline)
 
         # create temporary folder
-        path_tmp = sct.tmp_create(verbose=verbose)
+        path_tmp = sct.create_tmp(verbose=verbose)
 
         # Copying input data to tmp folder
         sct.printv('\nCopy files to tmp folder...', verbose)
