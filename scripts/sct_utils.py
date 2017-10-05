@@ -433,15 +433,17 @@ def create_folder(folder):
 # =======================================================================================================================
 def create_tmp(verbose=1):
     printv('\nCreate temporary folder...', verbose)
-    import time
-    import random
-    path_tmp = slash_at_the_end('tmp.' + time.strftime("%y%m%d%H%M%S") + '_' + str(random.randint(1, 1000000)), 1)
+    # import time
+    # import random
+    import tempfile
+    path_tmp = tempfile.mkstemp(suffix="", prefix='sct.')
+    # path_tmp = slash_at_the_end('tmp.' + time.strftime("%y%m%d%H%M%S") + '_' + str(random.randint(1, 1000000)), 1)
     # create directory
-    try:
-        os.makedirs(path_tmp)
-    except OSError:
-        if not os.path.isdir(path_tmp):
-            raise
+    # try:
+    #     os.makedirs(path_tmp)
+    # except OSError:
+    #     if not os.path.isdir(path_tmp):
+    #         raise
     return path_tmp
 
 
