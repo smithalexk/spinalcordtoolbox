@@ -164,6 +164,7 @@ def register(param, file_src, file_dest, file_mat, file_out):
     else:
         metric_radius = '4'
 
+    kw = dict()
     # register file_src to file_dest
     if param.todo == 'estimate' or param.todo == 'estimate_and_apply':
         # TODO fixup isct_ants* parsers
@@ -178,6 +179,8 @@ def register(param, file_src, file_dest, file_mat, file_out):
         ] + sct.get_interpolation('isct_antsSliceRegularizedRegistration', param.interp)
         if not param.fname_mask == '':
             cmd += ['-x', param.fname_mask]
+        kw.update(dict(is_sct_binary=True))
+
     if param.todo == 'apply':
         cmd = ['sct_apply_transfo',
          '-i', file_src + '.nii',
@@ -186,7 +189,7 @@ def register(param, file_src, file_dest, file_mat, file_out):
          '-o', file_out + '.nii',
          '-x', param.interp,
         ]
-    status, output = sct.run(cmd, param.verbose)
+    status, output = sct.run(cmd, param.verbose, **kw)
 
     # check if output file exists
     if not os.path.isfile(file_out + '.nii'):
