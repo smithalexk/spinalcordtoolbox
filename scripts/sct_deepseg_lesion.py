@@ -417,7 +417,6 @@ def segment_3d(model_fname, contrast_type, fname_in, fname_out):
 def deep_segmentation_MSlesion(fname_image, contrast_type, output_folder, ctr_algo='svm', brain_bool=True, remove_temp_files=1, verbose=1):
     """Pipeline."""
     path_script = os.path.dirname(__file__)
-    path_sct = os.path.dirname(path_script)
 
     # create temporary folder with intermediate results
     sct.log.info("\nCreating temporary folder...")
@@ -452,7 +451,7 @@ def deep_segmentation_MSlesion(fname_image, contrast_type, output_folder, ctr_al
     contrast_type_ctr = contrast_type.split('_')[0]
     if ctr_algo == 'svm':
         # run optic on a heatmap computed by a trained SVM+HoG algorithm
-        optic_models_fname = os.path.join(path_sct, 'data', 'optic_models', '{}_model'.format(contrast_type_ctr))
+        optic_models_fname = os.path.join(sct.__data_dir__, 'optic_models', '{}_model'.format(contrast_type_ctr))
         _, centerline_filename = optic.detect_centerline(image_fname=fname_res,
                                                          contrast_type=contrast_type_ctr,
                                                          optic_models_path=optic_models_fname,
@@ -468,7 +467,7 @@ def deep_segmentation_MSlesion(fname_image, contrast_type, output_folder, ctr_al
                             't2s': {'features': 8, 'dilation_layers': 3}}
 
         # load model
-        ctr_model_fname = os.path.join(path_sct, 'data', 'deepseg_sc_models', '{}_ctr.h5'.format(contrast_type_ctr))
+        ctr_model_fname = os.path.join(sct.__data_dir__, 'deepseg_sc_models', '{}_ctr.h5'.format(contrast_type_ctr))
         ctr_model = nn_architecture_ctr(height=dct_patch_ctr[contrast_type_ctr]['size'][0],
                                         width=dct_patch_ctr[contrast_type_ctr]['size'][1],
                                         channels=1,
@@ -522,7 +521,7 @@ def deep_segmentation_MSlesion(fname_image, contrast_type, output_folder, ctr_al
 
     # segment data using 3D convolutions
     sct.log.info("\nSegmenting the MS lesions using deep learning on 3D patches...")
-    segmentation_model_fname = os.path.join(path_sct, 'data', 'deepseg_lesion_models', '{}_lesion.h5'.format(contrast_type))
+    segmentation_model_fname = os.path.join(sct.__data_dir__, 'deepseg_lesion_models', '{}_lesion.h5'.format(contrast_type))
     fname_seg_crop_res = sct.add_suffix(fname_res3d, '_lesionseg')
     segment_3d(model_fname=segmentation_model_fname,
                 contrast_type=contrast_type,

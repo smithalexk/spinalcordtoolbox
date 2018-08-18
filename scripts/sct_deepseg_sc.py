@@ -531,7 +531,6 @@ def segment_3d(model_fname, contrast_type, fname_in, fname_out):
 def deep_segmentation_spinalcord(fname_image, contrast_type, output_folder, ctr_algo='cnn', brain_bool=True, kernel_size='2d', remove_temp_files=1, verbose=1):
     """Pipeline."""
     path_script = os.path.dirname(__file__)
-    path_sct = os.path.dirname(path_script)
 
     # create temporary folder with intermediate results
     sct.log.info("Creating temporary folder...")
@@ -565,7 +564,7 @@ def deep_segmentation_spinalcord(fname_image, contrast_type, output_folder, ctr_
     sct.log.info("Finding the spinal cord centerline...")
     if ctr_algo == 'svm':
         # run optic on a heatmap computed by a trained SVM+HoG algorithm
-        optic_models_fname = os.path.join(path_sct, 'data', 'optic_models', '{}_model'.format(contrast_type))
+        optic_models_fname = os.path.join(sct.__data_dir__, 'optic_models', '{}_model'.format(contrast_type))
         _, centerline_filename = optic.detect_centerline(image_fname=fname_res,
                                                          contrast_type=contrast_type,
                                                          optic_models_path=optic_models_fname,
@@ -585,7 +584,7 @@ def deep_segmentation_spinalcord(fname_image, contrast_type, output_folder, ctr_
                             'dwi': {'features': 8, 'dilation_layers': 2}}
 
         # load model
-        ctr_model_fname = os.path.join(path_sct, 'data', 'deepseg_sc_models', '{}_ctr.h5'.format(contrast_type))
+        ctr_model_fname = os.path.join(sct.__data_dir__, 'deepseg_sc_models', '{}_ctr.h5'.format(contrast_type))
         ctr_model = nn_architecture_ctr(height=dct_patch_ctr[contrast_type]['size'][0],
                                         width=dct_patch_ctr[contrast_type]['size'][1],
                                         channels=1,
@@ -635,7 +634,7 @@ def deep_segmentation_spinalcord(fname_image, contrast_type, output_folder, ctr_
     if kernel_size == '2d':
         # segment data using 2D convolutions
         sct.log.info("Segmenting the spinal cord using deep learning on 2D patches...")
-        segmentation_model_fname = os.path.join(path_sct, 'data', 'deepseg_sc_models', '{}_sc.h5'.format(contrast_type))
+        segmentation_model_fname = os.path.join(sct.__data_dir__, 'deepseg_sc_models', '{}_sc.h5'.format(contrast_type))
         fname_seg_crop = sct.add_suffix(fname_norm, '_seg')
         seg_crop_data = segment_2d(model_fname=segmentation_model_fname,
                                 contrast_type=contrast_type,
@@ -650,7 +649,7 @@ def deep_segmentation_spinalcord(fname_image, contrast_type, output_folder, ctr_
 
         # segment data using 3D convolutions
         sct.log.info("Segmenting the spinal cord using deep learning on 3D patches...")
-        segmentation_model_fname = os.path.join(path_sct, 'data', 'deepseg_sc_models', '{}_sc_3D.h5'.format(contrast_type))
+        segmentation_model_fname = os.path.join(sct.__data_dir__, 'deepseg_sc_models', '{}_sc_3D.h5'.format(contrast_type))
         fname_seg_crop_res = sct.add_suffix(fname_res3d, '_seg')
         segment_3d(model_fname=segmentation_model_fname,
                     contrast_type=contrast_type,
