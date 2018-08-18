@@ -109,7 +109,7 @@ def properties2d(image, resolution=None, verbose=1):
         square = map_coordinates(image, coordinates_grid_image.T, output=np.float32, order=0, mode='constant', cval=0.0)
         square_image = square.reshape((len(x_grid), len(x_grid)))
 
-        size_half = square_image.shape[1] / 2
+        size_half = square_image.shape[1] // 2
         left_image = square_image[:, :size_half]
         right_image = np.fliplr(square_image[:, size_half:])
 
