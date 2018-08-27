@@ -13,11 +13,11 @@ from spinalcordtoolbox.centerline import optic
 import spinalcordtoolbox.image as msct_image
 from spinalcordtoolbox.image import Image
 from msct_types import Centerline
-from sct_viewer import ClickViewerPropseg
 from sct_straighten_spinalcord import smooth_centerline
 
 
 def viewer_centerline(image_fname, interslice_gap, verbose):
+    from sct_viewer import ClickViewerPropseg
     image_input_reoriented = Image(image_fname)
     nx, ny, nz, nt, px, py, pz, pt = image_input_reoriented.dim
     viewer = ClickViewerPropseg(image_input_reoriented)
